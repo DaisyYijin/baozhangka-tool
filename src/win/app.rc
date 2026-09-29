@@ -1,4 +1,4 @@
-/* app.rc - 清单与版本信息(不依赖系统头文件,便于 windres 直接编译) */
+﻿/* app.rc - 清单与版本信息(不依赖系统头文件,便于 windres 直接编译) */
 
 /* RT_MANIFEST = 24 */
 1 24 "app.manifest"
@@ -29,3 +29,4 @@ BEGIN
         VALUE "Translation", 0x0409, 1200
     END
 END
+

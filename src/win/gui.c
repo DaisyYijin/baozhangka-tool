@@ -18,12 +18,14 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <windowsx.h>
 #include <commctrl.h>
 #include <commdlg.h>
 #include "ac_defs.h"
 #include "engine.h"
 #include "sheet.h"
+#include "zip.h"
 #include "import.h"
 #include "u8.h"
 #include "platform_win.h"
@@ -1334,23 +1336,116 @@ enum {
     CTX_EDIT, CTX_DEL, CTX_UP, CTX_DOWN, CTX_DUP
 };
 
-/* 打开网页版「保障卡综合检查工具」(需从 Release 下载 checker-web.zip 解压) */
+/* 综合检查工具(zip 内嵌,运行时解压到用户目录后用浏览器打开) */
+#define IDR_WEBZIP 301
+
+struct wz_ctx {
+    const uint8_t *data;
+    size_t size;
+    const wchar_t *root;
+    int files;
+};
+
+static int wz_extract_cb(const char *name, void *ud)
+{
+    struct wz_ctx *c = (struct wz_ctx *)ud;
+    const char *rel = name;
+    if (strncmp(rel, "web/", 4) == 0) rel += 4;      /* 去掉打包前缀 */
+    if (!rel[0]) return 0;
+
+    wchar_t wrel[512];
+    if (u8_to_wcs(rel, wrel, 511) == 0) return 0;
+    for (wchar_t *q = wrel; *q; q++)
+        if (*q == L'/') *q = L'\\';
+
+    wchar_t full[MAX_PATH + 512];
+    _snwprintf(full, MAX_PATH + 511, L"%ls\\%ls", c->root, wrel);
+    full[MAX_PATH + 511] = 0;
+
+    size_t len = wcslen(full);
+    if (len && full[len - 1] == L'\\') {            /* 目录条目 */
+        full[len - 1] = 0;
+        SHCreateDirectoryExW(NULL, full, NULL);
+        return 0;
+    }
+    wchar_t *sl = wcsrchr(full, L'\\');
+    if (sl) {
+        *sl = 0;
+        SHCreateDirectoryExW(NULL, full, NULL);
+        *sl = L'\\';
+    }
+    size_t outLen = 0;
+    uint8_t *d = zip_read(c->data, c->size, name, 0, NULL, 0, &outLen);
+    if (!d) return 0;
+    FILE *f = _wfopen(full, L"wb");
+    if (f) {
+        fwrite(d, 1, outLen, f);
+        fclose(f);
+        c->files++;
+    }
+    free(d);
+    return 0;
+}
+
 static void open_checker_tool(void)
 {
+    /* 优先:exe 旁的 保障卡综合检查工具\主程序.html(用户可自行替换定制) */
     wchar_t dir[MAX_PATH], html[MAX_PATH + 64];
     GetModuleFileNameW(NULL, dir, MAX_PATH);
     wchar_t *p = wcsrchr(dir, L'\\');
     if (p) *(p + 1) = 0;
-    _snwprintf(html, MAX_PATH + 63, L"%s保障卡综合检查工具\\主程序.html", dir);
+    _snwprintf(html, MAX_PATH + 63, L"%ls保障卡综合检查工具\\主程序.html", dir);
     html[MAX_PATH + 63] = 0;
+
+    if (GetFileAttributesW(html) == INVALID_FILE_ATTRIBUTES) {
+        /* 其次:内嵌包解压到 LOCALAPPDATA 下 */
+        extern const unsigned char WEB_ZIP_DATA[];
+        extern const unsigned int WEB_ZIP_LEN;
+        const uint8_t *zp = WEB_ZIP_DATA;
+        DWORD zs = WEB_ZIP_LEN;
+        if (!zp || !zs) {
+            msg_info(L"程序内未包含综合检查工具包。\n\n"
+                     L"请从 GitHub Release 下载 baozhangka-checker-web.zip,\n"
+                     L"解压到本程序所在目录后重试。");
+            return;
+        }
+        wchar_t root[MAX_PATH];
+        DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", root, MAX_PATH - 32);
+        if (!n || !root[0]) wcsncpy(root, dir, MAX_PATH - 32);   /* 退回 exe 目录 */
+        wcscat(root, L"\\baozhangka-tool");
+        SHCreateDirectoryExW(NULL, root, NULL);
+
+        /* stamp(嵌入包字节数)变化才重新解压 */
+        int need = 1;
+        wchar_t stamp[MAX_PATH + 32];
+        _snwprintf(stamp, MAX_PATH + 31, L"%ls\\web.stamp", root);
+        stamp[MAX_PATH + 31] = 0;
+        FILE *f = _wfopen(stamp, L"rb");
+        if (f) {
+            char buf[32] = {0};
+            if (fgets(buf, sizeof(buf) - 1, f)) {
+                DWORD old = (DWORD)strtoul(buf, NULL, 10);
+                need = (old != zs);
+            }
+            fclose(f);
+        }
+        if (need) {
+            struct wz_ctx c = { zp, zs, root, 0 };
+            zip_list(zp, zs, wz_extract_cb, &c);
+            f = _wfopen(stamp, L"wb");
+            if (f) { fprintf(f, "%lu", (unsigned long)zs); fclose(f); }
+            log_add(L"综合检查工具:已释放 %d 个文件(内嵌包 %.1f MB)",
+                    c.files, zs / 1048576.0);
+        }
+        _snwprintf(html, MAX_PATH + 63, L"%ls\\保障卡综合检查工具\\主程序.html", root);
+        html[MAX_PATH + 63] = 0;
+    }
+
     if (GetFileAttributesW(html) != INVALID_FILE_ATTRIBUTES) {
         ShellExecuteW(NULL, L"open", html, NULL, NULL, SW_SHOWNORMAL);
         log_add(L"已打开综合检查工具(浏览器)");
     } else {
-        msg_info(L"未找到综合检查工具。\n\n"
-                 L"请从 GitHub Release 下载 baozhangka-checker-web.zip,\n"
-                 L"解压到本程序所在目录,使存在:\n"
-                 L"  保障卡综合检查工具\\主程序.html");
+        msg_err(L"综合检查工具打开失败。");
     }
 }
 
@@ -1747,7 +1842,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 { L"综合检查", IDC_BTN_CHECKER },
             };
             int ny = 14 + (NAV_BTN_H + 6) * 2 + 12;   /* 分隔区之后 */
-            for (int i = 0; i < 7; i++) {
+            for (int i = 0; i < 8; i++) {
                 g_hBtn[6 + i] = mk(L"BUTTON", nav[i].txt, BS_OWNERDRAW,
                                    (NAV_W - NAV_BTN_W) / 2, ny, NAV_BTN_W, NAV_BTN_H, nav[i].id);
                 ny += NAV_BTN_H + 6;

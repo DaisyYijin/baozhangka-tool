@@ -24,3 +24,7 @@ ac_paste.log
 
 # Office 临时锁文件
 ~$*
+
+# 生成的内嵌工具包
+build/web.zip
+build/web_zip_data.c
