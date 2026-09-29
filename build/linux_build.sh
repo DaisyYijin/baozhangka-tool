@@ -37,4 +37,4 @@ gcc $CFLAGS -o dist/baozhangka-tool \
 echo ""
 echo "构建成功: dist/baozhangka-tool"
 echo "运行: ./dist/baozhangka-tool"
-uname -m | grep -q arm && echo "(当前架构: $(uname -m))"
+echo "(当前架构: $(uname -m))"
