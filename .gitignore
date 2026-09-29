@@ -1,0 +1,26 @@
+# 构建产物
+dist/
+build/*.o
+build/*.exe
+build/xlsx_src/
+*.o
+*.exe
+*.txt
+
+# 临时
+trace.txt
+tf.txt
+zip_out.txt
+test_out.txt
+mini_out.txt
+
+# 开发过程截图
+build/*.png
+
+# 运行时产物
+dist/last_task.csv
+ac_dump.csv
+ac_paste.log
+
+# Office 临时锁文件
+~$*
