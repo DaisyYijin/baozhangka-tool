@@ -1,6 +1,12 @@
 ﻿/* ============================================================
  * engine.c - 执行引擎 + 任务管理 + 动作类型表
  * ============================================================ */
+/* 宽字符不区分大小写比较:Windows CRT 与 POSIX 命名不同 */
+#ifdef _WIN32
+#define AC_WCS_NICMP _wcsnicmp
+#else
+#define AC_WCS_NICMP wcsncasecmp
+#endif
 #include "engine.h"
 #include "ac_keys.h"
 #include <stdlib.h>
@@ -215,7 +221,7 @@ static void expand_text(const Task *t, int loop, const wchar_t *src,
 
     for (int i = 0; src[i] && oi < cap - 1; ) {
         if (src[i] == L'{' &&
-            (wcsncmp(src + i, L"{行}", 3) == 0 || _wcsnicmp(src + i, L"{row}", 5) == 0)) {
+            (wcsncmp(src + i, L"{行}", 3) == 0 || AC_WCS_NICMP(src + i, L"{row}", 5) == 0)) {
             int skip = (src[i + 1] == L'行') ? 3 : 5;      /* {行} 或 {row} */
             for (const wchar_t *p = row; *p && oi < cap - 1; p++)
                 out[oi++] = *p;
