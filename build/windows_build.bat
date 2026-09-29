@@ -1,13 +1,19 @@
-﻿@echo off
+@echo off
 rem ============================================================
 rem Windows build (XP~Win11, 32-bit, static, single exe)
 rem Toolchain: MSYS2 MinGW-w64 i686
+rem   local default : C:\msys64
+rem   CI            : toolchain injected via PATH (setup-msys2)
 rem ============================================================
 setlocal
-rem 工具链优先取 PATH(本地默认 C:\msys64,CI 由 setup-msys2 注入)
+if not defined MSYS2_ROOT set MSYS2_ROOT=C:\msys64
+rem prefer known MSYS2 location over any gcc found in PATH
+if exist "%MSYS2_ROOT%\mingw32\bin\gcc.exe" (
+    set "PATH=%MSYS2_ROOT%\mingw32\bin;%PATH%"
+)
 where gcc.exe >nul 2>&1 || (
-    if not defined MSYS2_ROOT set MSYS2_ROOT=C:\msys64
-    set PATH=%MSYS2_ROOT%\mingw32\bin;%PATH%
+    echo gcc not found. Install MSYS2 mingw-w64-i686-gcc or set MSYS2_ROOT.
+    exit /b 1
 )
 set GCC=gcc.exe
 set WINDRES=windres.exe
