@@ -2276,7 +2276,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmdLine, int show)
     int h = sh > 760 ? 700 : sh - 60;
 
     g_hMain = CreateWindowExW(0, MAIN_CLASS,
-        L"保障卡全能工具 - Excel 批量导入 · 输入前清空",
+        L"保障卡全能工具",
         WS_OVERLAPPEDWINDOW,
         (sw - w) / 2, (sh - h) / 3, w, h,
         NULL, NULL, hInst, NULL);
