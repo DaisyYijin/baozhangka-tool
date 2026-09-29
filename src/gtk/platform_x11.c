@@ -3,6 +3,7 @@
  * 鼠标/键盘合成、滚轮、可中断睡眠、热键轮询
  * 剪贴板由 GUI 侧(GTK)协助,见 x11_text_paste
  * ============================================================ */
+#define _DEFAULT_SOURCE          /* useconds_t(usleep) */
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>

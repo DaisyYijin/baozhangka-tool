@@ -78,43 +78,32 @@ jobs:
           name: baozhangka-tool-linux-arm64
           path: baozhangka-tool-linux-arm64.tar.gz
 
-  # ---------- Linux ARM32/armhf(树莓派 32 位系统,交叉编译) ----------
+  # ---------- Linux ARM32/armhf(树莓派 32 位系统,QEMU 原生编译) ----------
   linux-armhf:
     runs-on: ubuntu-latest
-    continue-on-error: true     # 交叉依赖较脆,失败不影响其它产物
+    continue-on-error: true     # QEMU 较慢且环境易变,失败不影响其它产物
     steps:
       - uses: actions/checkout@v4
-      - name: Setup multiarch (armhf)
+      - uses: uraimo/run-on-arch-action@v2
+        name: Build on armv7
+        with:
+          arch: armv7
+          distro: ubuntu22.04
+          dockerRunArgs: |
+            --volume "${{ github.workspace }}:/repo"
+          run: |
+            set -e
+            cp -r /repo /src && cd /src
+            apt-get update
+            apt-get install -y gcc pkg-config file libgtk-3-dev libxtst-dev
+            sh build/linux_build.sh
+            file dist/baozhangka-tool
+            cp baozhangka-tool* /repo/ 2>/dev/null || cp dist/baozhangka-tool /repo/
+            cd /repo && tar -czf baozhangka-tool-linux-armhf.tar.gz baozhangka-tool
+      - name: Package artifact
         run: |
-          set -e
-          sudo dpkg --add-architecture armhf
-          # 兼容 deb822(24.04)与传统 sources.list 两种格式
-          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-            sudo sed -i 's/^Architectures: amd64$/Architectures: amd64 i386/' /etc/apt/sources.list.d/ubuntu.sources
-            echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports noble main universe" | sudo tee /etc/apt/sources.list.d/armhf.list >/dev/null
-          else
-            sudo sed -i 's/^deb http/deb [arch=amd64,i386] http/' /etc/apt/sources.list
-            echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs) main universe" | sudo tee -a /etc/apt/sources.list >/dev/null
-          fi
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-linux-gnueabihf pkg-config file \
-            libgtk-3-dev:armhf libxtst-dev:armhf
-      - name: Build
-        run: |
-          set -e
-          export CC=arm-linux-gnueabihf-gcc
-          export PKG_CONFIG_LIBDIR="/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig"
-          CFLAGS="-std=c99 -O2 -Wall -Isrc/core -Isrc/gtk $(pkg-config --cflags gtk+-3.0 x11 xtst)"
-          LIBS="$(pkg-config --libs gtk+-3.0 x11 xtst) -lm"
-          mkdir -p dist
-          $CC $CFLAGS -o dist/baozhangka-tool \
-            src/core/u8.c src/core/inflate.c src/core/zip.c src/core/sheet.c \
-            src/core/engine.c src/core/ac_keys.c src/core/import.c \
-            src/gtk/platform_x11.c src/gtk/main.c \
-            $LIBS
-          file dist/baozhangka-tool
-      - name: Package
-        run: tar -czf baozhangka-tool-linux-armhf.tar.gz -C dist baozhangka-tool
+          cd "$GITHUB_WORKSPACE"
+          [ -f baozhangka-tool-linux-armhf.tar.gz ] || tar -czf baozhangka-tool-linux-armhf.tar.gz baozhangka-tool
       - uses: actions/upload-artifact@v4
         with:
           name: baozhangka-tool-linux-armhf
