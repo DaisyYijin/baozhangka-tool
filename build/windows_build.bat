@@ -22,7 +22,7 @@ if not exist build mkdir build
 if not exist dist  mkdir dist
 
 echo [0/2] web.zip ...
-python build\gen_web_zip.py
+where python >nul 2>&1 && (python build\gen_web_zip.py) || (py -3 build\gen_web_zip.py)
 if errorlevel 1 goto :err
 
 echo [1/2] windres ...
