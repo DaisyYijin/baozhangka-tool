@@ -17,6 +17,7 @@
 #endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 #include <windowsx.h>
 #include <commctrl.h>
 #include <commdlg.h>
@@ -43,6 +44,7 @@ enum {
     IDC_BTN_PICK, IDC_BTN_IMPORT, IDC_BTN_FLOAT,
     IDC_BTN_OPEN, IDC_BTN_SAVE, IDC_BTN_START, IDC_BTN_STOP,
     IDC_BTN_HELP,
+    IDC_BTN_CHECKER,                /* 打开网页版综合检查工具 */
     IDC_ED_LOOPS, IDC_ED_GAP, IDC_ED_COUNTDOWN, IDC_ED_JITTER,
     IDC_BTN_DATA,                 /* Excel 数据行绑定(保留枚举) */
     IDC_CHK_EXCELROWS,            /* 勾选:循环次数=Excel 行数 */
@@ -1332,6 +1334,26 @@ enum {
     CTX_EDIT, CTX_DEL, CTX_UP, CTX_DOWN, CTX_DUP
 };
 
+/* 打开网页版「保障卡综合检查工具」(需从 Release 下载 checker-web.zip 解压) */
+static void open_checker_tool(void)
+{
+    wchar_t dir[MAX_PATH], html[MAX_PATH + 64];
+    GetModuleFileNameW(NULL, dir, MAX_PATH);
+    wchar_t *p = wcsrchr(dir, L'\\');
+    if (p) *(p + 1) = 0;
+    _snwprintf(html, MAX_PATH + 63, L"%s保障卡综合检查工具\\主程序.html", dir);
+    html[MAX_PATH + 63] = 0;
+    if (GetFileAttributesW(html) != INVALID_FILE_ATTRIBUTES) {
+        ShellExecuteW(NULL, L"open", html, NULL, NULL, SW_SHOWNORMAL);
+        log_add(L"已打开综合检查工具(浏览器)");
+    } else {
+        msg_info(L"未找到综合检查工具。\n\n"
+                 L"请从 GitHub Release 下载 baozhangka-checker-web.zip,\n"
+                 L"解压到本程序所在目录,使存在:\n"
+                 L"  保障卡综合检查工具\\主程序.html");
+    }
+}
+
 static void show_help(void)
 {
     MessageBoxW(g_hMain,
@@ -1722,6 +1744,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 { L"↓ 下移",   IDC_BTN_DOWN },
                 { L"导入导出", IDC_BTN_IMPORT },
                 { L"使用说明", IDC_BTN_HELP },
+                { L"综合检查", IDC_BTN_CHECKER },
             };
             int ny = 14 + (NAV_BTN_H + 6) * 2 + 12;   /* 分隔区之后 */
             for (int i = 0; i < 7; i++) {
@@ -2151,6 +2174,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
 
         case IDC_BTN_HELP:   show_help(); return 0;
+        case IDC_BTN_CHECKER: open_checker_tool(); return 0;
         case IDC_BTN_SAVE:   save_task();  return 0;
         case IDC_BTN_START:
             if (g_running) stop_run();

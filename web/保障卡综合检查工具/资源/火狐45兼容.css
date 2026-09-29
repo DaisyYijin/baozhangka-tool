@@ -1,0 +1,385 @@
+/**
+ * Firefox 45.0.2 CSS 兼容性补丁
+ *
+ * 主要修复：
+ * 1. gap 属性不支持 - 使用 margin 替代（仅在不支持 gap 的旧浏览器生效，
+ *    通过 @supports 条件包裹，避免现代浏览器上 gap 与 margin 叠加导致间距翻倍）
+ * 2. 某些 flexbox 高级特性
+ *
+ * 注意：与 gap 无关的通用样式（flex 修复、按钮高度统一等）保持在条件块外，
+ * 对所有浏览器生效。
+ */
+
+/* ============================================================
+   gap 替代方案：仅在不支持 gap 的旧浏览器（如 Firefox 45）生效
+   ============================================================ */
+@supports not (gap: 1px) {
+
+/* 搜索栏和按钮区域 - 使用 margin 替代 gap - 强制优先级 */
+/* 缩小搜索栏与标签页的间距 */
+.search-and-add-bar {
+    padding: 6px 0 !important;
+}
+
+.search-and-add-bar > * {
+    margin-right: 10px !important;
+}
+
+.search-and-add-bar > *:last-child {
+    margin-right: 0 !important;
+}
+
+.search-bar > * {
+    margin-right: 10px !important;
+}
+
+.search-bar > *:last-child {
+    margin-right: 0 !important;
+}
+
+/* 按钮组 - 使用 margin 替代 gap - 强制优先级 */
+.registry-actions > * {
+    margin-right: 8px !important;
+}
+
+.registry-actions > *:last-child {
+    margin-right: 0 !important;
+}
+
+.registry-subtabs > * {
+    margin-right: 8px !important;
+}
+
+.registry-subtabs > *:last-child {
+    margin-right: 0 !important;
+}
+
+.header-actions > * {
+    margin-right: 8px !important;
+    margin-bottom: 8px !important;
+}
+
+/* 表头行 */
+.registry-header-row > * {
+    margin-right: 12px !important;
+}
+
+.registry-header-row > *:last-child {
+    margin-right: 0 !important;
+}
+
+/* 按钮内部图标 */
+.btn > *:not(:last-child),
+.btn-template > *:not(:last-child),
+.btn-import > *:not(:last-child),
+.btn-export > *:not(:last-child),
+.btn-data-manage > *:not(:last-child),
+.btn-add-inline > *:not(:last-child),
+.btn-batch-edit > *:not(:last-child),
+.btn-print > *:not(:last-child) {
+    margin-right: 6px !important;
+}
+
+/* 分页控件 */
+.pagination-container {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+}
+
+.pagination-controls > * {
+    margin-right: 6px !important;
+}
+
+.pagination-controls > *:last-child {
+    margin-right: 0 !important;
+}
+
+/* 筛选器 */
+.filters > * {
+    margin-right: 8px !important;
+    margin-bottom: 8px !important;
+}
+
+/* 卡片筛选器 */
+.filter-cards-container > * {
+    margin-right: 12px !important;
+    margin-bottom: 12px !important;
+}
+
+.child-filter-cards > * {
+    margin-right: 5px !important;
+    margin-bottom: 5px !important;
+}
+
+/* 批量修改模态框 */
+.batch-form > * {
+    margin-bottom: 12px !important;
+}
+
+.batch-form > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+.batch-row > * {
+    margin-right: 12px !important;
+}
+
+.batch-row > *:last-child {
+    margin-right: 0 !important;
+}
+
+.batch-tips {
+    margin-right: 8px !important;
+}
+
+.modal-footer > * {
+    margin-left: 10px !important;
+}
+
+.modal-footer > *:first-child {
+    margin-left: 0 !important;
+}
+
+/* 数据管理下拉菜单 */
+.data-manage-menu > * {
+    margin-bottom: 0;
+}
+
+/* 打印菜单项之间的间距 */
+.print-menu-item {
+    margin-bottom: 0;
+}
+
+/* 规则选择器 - 兼容横向和纵向布局 */
+.rules-container.horizontal .rule-category > * {
+    margin-right: 8px !important;
+    margin-bottom: 8px !important;
+}
+
+.rules-container .rule-category.horizontal .category-buttons > * {
+    margin-right: 6px !important;
+    margin-bottom: 6px !important;
+}
+
+.category-header-with-select.horizontal > * {
+    margin-right: 10px !important;
+}
+
+.category-header-with-select.horizontal > *:last-child {
+    margin-right: 0 !important;
+}
+
+} /* end @supports not (gap) - gap替代方案结束 */
+
+/* 修复 inline-flex 元素的对齐 */
+.btn,
+.btn-template,
+.btn-import,
+.btn-export,
+.btn-data-manage,
+.btn-add-inline,
+.btn-batch-edit,
+.btn-print,
+.btn-modal {
+    display: -webkit-inline-box;
+    display: -ms-inline-flexbox;
+    display: inline-flex;
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    align-items: center;
+}
+
+/* 修复 flex 容器 */
+.search-and-add-bar,
+.search-bar,
+.registry-actions,
+.registry-subtabs,
+.header-actions,
+.registry-header-row,
+.pagination-container,
+.pagination-controls,
+.filters,
+.filter-cards-container,
+.child-filter-cards,
+.parent-card-header,
+.batch-form,
+.batch-row,
+.modal-footer {
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+}
+
+/* 垂直布局 */
+.batch-form {
+    -webkit-box-orient: vertical;
+    -webkit-box-direction: normal;
+    -ms-flex-direction: column;
+    flex-direction: column;
+}
+
+/* 水平对齐 */
+.search-and-add-bar,
+.search-bar,
+.registry-actions,
+.registry-subtabs,
+.header-actions,
+.registry-header-row,
+.pagination-controls,
+.filters,
+.filter-cards-container,
+.child-filter-cards,
+.parent-card-header,
+.batch-row,
+.modal-footer {
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    align-items: center;
+}
+
+/* flex-wrap */
+.registry-header-row,
+.header-actions,
+.filters,
+.filter-cards-container,
+.child-filter-cards,
+.pagination-controls {
+    -ms-flex-wrap: wrap;
+    flex-wrap: wrap;
+}
+
+/* Grid 布局兼容性 - stats 统计卡片
+   仅在不支持 gap 的旧浏览器降级为 block 布局，现代浏览器保留 grid 布局 */
+@supports not (gap: 1px) {
+.stats {
+    display: block; /* 降级为block布局 */
+}
+
+.stats .stat {
+    width: 23%;
+    display: inline-block;
+    margin-right: 2%;
+    margin-bottom: 10px;
+    vertical-align: top;
+    box-sizing: border-box;
+}
+
+.stats .stat:nth-child(4n) {
+    margin-right: 0;
+}
+
+/* 响应式：小屏幕下统计卡片全宽 */
+@media (max-width: 768px) {
+    .stats .stat {
+        width: 48%;
+        margin-right: 4%;
+    }
+    
+    .stats .stat:nth-child(2n) {
+        margin-right: 0;
+    }
+    
+    .stats .stat:nth-child(4n) {
+        margin-right: 4%;
+    }
+}
+
+@media (max-width: 600px) {
+    .stats .stat {
+        width: 100%;
+        margin-right: 0;
+    }
+}
+} /* end @supports not (gap) - stats降级结束 */
+
+/* 确保按钮不会因为没有gap而粘在一起（仅旧浏览器） */
+@supports not (gap: 1px) {
+.print-dropdown {
+    margin-left: 0;
+}
+}
+
+/* 修复可能的文本溢出问题 */
+.btn,
+.btn-template,
+.btn-import,
+.btn-export,
+.btn-data-manage,
+.btn-add-inline,
+.btn-batch-edit,
+.btn-print {
+    box-sizing: border-box;
+}
+
+/* 确保下拉菜单不受影响 */
+.data-manage-menu,
+.print-menu {
+    box-sizing: border-box;
+}
+
+/* ============================================
+   统一按钮高度 - 让打印那一行和导入导出一样高
+   ============================================ */
+
+/* 导入导出按钮组 - 保持原样（padding: 6px 12px, font-size: 13px）*/
+.btn-template,
+.btn-import,
+.btn-export,
+.btn-data-manage {
+    padding: 6px 12px !important;
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+    box-sizing: border-box !important;
+}
+
+/* 搜索栏 - 调整为和导入导出按钮一样的高度 */
+.search-bar {
+    height: auto !important;
+    padding: 6px 12px !important;
+    box-sizing: border-box !important;
+}
+
+/* 批量修改、打印、新增按钮 - 改为和导入导出一样的尺寸 */
+.btn-add-inline,
+.btn-batch-edit,
+.btn-print {
+    padding: 6px 12px !important;
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+    box-sizing: border-box !important;
+    height: auto !important;
+}
+
+/* 确保按钮内容垂直居中 */
+.btn-template,
+.btn-import,
+.btn-export,
+.btn-data-manage,
+.btn-add-inline,
+.btn-batch-edit,
+.btn-print {
+    display: -webkit-inline-box !important;
+    display: -ms-inline-flexbox !important;
+    display: inline-flex !important;
+    -webkit-box-align: center !important;
+    -ms-flex-align: center !important;
+    align-items: center !important;
+    -webkit-box-pack: center !important;
+    -ms-flex-pack: center !important;
+    justify-content: center !important;
+}
+
+/* 标签页按钮保持紧凑 */
+.subtab-btn {
+    padding: 6px 12px !important;
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+    box-sizing: border-box !important;
+    display: -webkit-inline-box !important;
+    display: -ms-inline-flexbox !important;
+    display: inline-flex !important;
+    -webkit-box-align: center !important;
+    -ms-flex-align: center !important;
+    align-items: center !important;
+}
+

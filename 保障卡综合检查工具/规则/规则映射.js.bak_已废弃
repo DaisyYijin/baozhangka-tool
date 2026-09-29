@@ -1,0 +1,444 @@
+/**
+ * 规则函数映射表
+ * 提供拼音函数名到英文名的映射，便于理解和使用
+ */
+(function(window) {
+    'use strict';
+    
+    var RulesMapping = {
+        // ==================== 规则函数映射（拼音 -> 英文）====================
+        RULES: {
+            'checkXuexing': {
+                name: '血型检查',
+                englishName: 'checkBloodType',
+                category: '个人信息',
+                description: '检查血型字段的有效性（A/B/O/AB型，RH+/-）',
+                func: null  // 将在运行时填充
+            },
+            'checkHunyin': {
+                name: '婚姻状况检查',
+                englishName: 'checkMaritalStatus',
+                category: '家庭信息',
+                description: '检查婚姻状况的有效性及婚姻日期的完整性',
+                func: null
+            },
+            'checkLianxiDianhua': {
+                name: '联系电话检查',
+                englishName: 'checkPhone',
+                category: '个人信息',
+                description: '检查联系电话格式（11位手机号）',
+                func: null
+            },
+            'checkWenhuaChengdu': {
+                name: '文化程度检查',
+                englishName: 'checkEducation',
+                category: '教育信息',
+                description: '检查文化程度（学历）的有效性',
+                func: null
+            },
+            'checkRenyuanLeibie': {
+                name: '人员类别检查',
+                englishName: 'checkPersonnelType',
+                category: '工作信息',
+                description: '检查人员类别的有效性',
+                func: null
+            },
+            'checkXingzhengZhiwu': {
+                name: '行政职务检查',
+                englishName: 'checkAdminPosition',
+                category: '工作信息',
+                description: '检查指挥管理军官和专业技术军官的行政职务必填',
+                func: null
+            },
+            'checkXingzhengZhiwuRiqi': {
+                name: '行政职务日期检查',
+                englishName: 'checkAdminPositionDate',
+                category: '工作信息',
+                description: '检查指挥管理军官和专业技术军官的行政职务日期必填',
+                func: null
+            },
+            'checkZhengjianBianhao': {
+                name: '证件编号检查',
+                englishName: 'checkCertNumber',
+                category: '证件信息',
+                description: '检查军队证件编号的格式（前缀+号）',
+                func: null
+            },
+            'checkZhengjianleixing': {
+                name: '证件类型检查',
+                englishName: 'checkCertType',
+                category: '证件信息',
+                description: '检查证件类型与人员类别的匹配性',
+                func: null
+            },
+            'checkShenfenzhengRiqi': {
+                name: '身份证日期检查',
+                englishName: 'checkIdCardDate',
+                category: '证件信息',
+                description: '检查身份证起止日期的有效性（10/20/30年）',
+                func: null
+            },
+            'checkAirenQingkuang': {
+                name: '爱人信息完整性检查',
+                englishName: 'checkSpouseInfo',
+                category: '家庭信息',
+                description: '检查已婚人员的配偶信息完整性',
+                func: null
+            },
+            'checkBiyeRiqi': {
+                name: '毕业日期检查',
+                englishName: 'checkGraduationDate',
+                category: '教育信息',
+                description: '检查毕业日期的合理性（学制年限）',
+                func: null
+            },
+            'checkRuxueRiqi': {
+                name: '入学日期检查',
+                englishName: 'checkAdmissionDate',
+                category: '教育信息',
+                description: '检查入学日期的合理性',
+                func: null
+            },
+            'checkXuewei': {
+                name: '学位检查',
+                englishName: 'checkDegree',
+                category: '教育信息',
+                description: '检查学位与文化程度的匹配性',
+                func: null
+            },
+            'checkBiyeYuanxiao': {
+                name: '毕业院校检查',
+                englishName: 'checkGraduateSchool',
+                category: '教育信息',
+                description: '检查毕业院校信息的完整性',
+                func: null
+            },
+            'checkBiyeZhuanye': {
+                name: '毕业专业检查',
+                englishName: 'checkMajor',
+                category: '教育信息',
+                description: '检查文化程度在技工学校及以上时毕业专业必填',
+                func: null
+            },
+            'checkZhengzhiMianmao': {
+                name: '政治面貌检查',
+                englishName: 'checkPoliticalStatus',
+                category: '政治信息',
+                description: '检查政治面貌的有效性',
+                func: null
+            },
+            'checkChaoYubeiDangyuanShijian': {
+                name: '超预备党员时间检查',
+                englishName: 'checkProbationaryPartyMemberTime',
+                category: '政治信息',
+                description: '检查中共预备党员时间是否超过一年',
+                func: null
+            },
+            'checkTixing': {
+                name: '体型数据检查',
+                englishName: 'checkBodySize',
+                category: '个人信息',
+                description: '检查体型数据（身高、胸围、腰围）的合理性',
+                func: null
+            },
+            'checkDushengZinv': {
+                name: '独生子女信息检查',
+                englishName: 'checkOnlyChild',
+                category: '家庭信息',
+                description: '检查独生子女信息的完整性',
+                func: null
+            },
+            'checkXianjuzhudizhi': {
+                name: '现居住地址检查',
+                englishName: 'checkAddress',
+                category: '个人信息',
+                description: '检查现居住地址的完整性',
+                func: null
+            },
+            'checkRuwudi': {
+                name: '入伍地检查',
+                englishName: 'checkEnlistmentPlace',
+                category: '工作信息',
+                description: '检查入伍地信息',
+                func: null
+            },
+            'checkGongzuoRiqi': {
+                name: '工作日期检查',
+                englishName: 'checkWorkStartDate',
+                category: '工作信息',
+                description: '检查工作日期的合理性',
+                func: null
+            },
+            'checkXuangaishiguanRiqi': {
+                name: '选改士官日期检查',
+                englishName: 'checkNCOSelectionDate',
+                category: '工作信息',
+                description: '检查选改士官日期的合理性',
+                func: null
+            },
+            'checkGuhuazhucema': {
+                name: '固化注册码检查',
+                englishName: 'checkSolidifiedCode',
+                category: '工作信息',
+                description: '检查固化注册码的格式',
+                func: null
+            },
+            'checkShibingZhucema': {
+                name: '士兵注册码检查',
+                englishName: 'checkSoldierCode',
+                category: '工作信息',
+                description: '检查士兵注册码的格式',
+                func: null
+            },
+            'checkDanweizhudi': {
+                name: '单位驻地检查',
+                englishName: 'checkUnitLocation',
+                category: '单位信息',
+                description: '检查单位驻地信息',
+                func: null
+            },
+            'checkDanweizhudiXingzhengquhuadaima': {
+                name: '单位驻地行政区划代码检查',
+                englishName: 'checkUnitAreaCode',
+                category: '单位信息',
+                description: '检查单位驻地行政区划代码',
+                func: null
+            },
+            'checkZuzhiguanxiJigouMingcheng': {
+                name: '组织关系机构名称检查',
+                englishName: 'checkOrgRelation',
+                category: '单位信息',
+                description: '检查组织关系机构名称',
+                func: null
+            },
+            'checkYiliaoBaozhang': {
+                name: '医疗保障单位检查',
+                englishName: 'checkMedicalUnit',
+                category: '保障信息',
+                description: '检查医疗保障单位一致性',
+                func: null
+            },
+            'checkJicengYiliaoJigou': {
+                name: '基层医疗机构一致性检查',
+                englishName: 'checkBasicMedical',
+                category: '保障信息',
+                description: '检查基层医疗机构一致性',
+                func: null
+            },
+            'checkTixiYiyuan': {
+                name: '体系医院一致性检查',
+                englishName: 'checkSystemHospital',
+                category: '保障信息',
+                description: '检查体系医院一致性',
+                func: null
+            },
+            'checkGongxinFafang': {
+                name: '工薪发放单位检查',
+                englishName: 'checkSalaryUnit',
+                category: '保障信息',
+                description: '检查工薪发放单位一致性',
+                func: null
+            },
+            'checkBeizhuangFafang': {
+                name: '被装发放单位检查',
+                englishName: 'checkClothingUnit',
+                category: '保障信息',
+                description: '检查被装发放单位一致性',
+                func: null
+            },
+            'checkFuzhuangdengjibiaohao': {
+                name: '服装登记表号检查',
+                englishName: 'checkClothingSize',
+                category: '保障信息',
+                description: '检查服装登记表号',
+                func: null
+            },
+            'checkCaiwuDaiyuRenyuanLeibie': {
+                name: '财务待遇类别一致性检查',
+                englishName: 'checkFinancialTreatment',
+                category: '保障信息',
+                description: '检查财务待遇类别一致性',
+                func: null
+            },
+            'checkJiguan': {
+                name: '籍贯检查',
+                englishName: 'checkNativePlace',
+                category: '个人信息',
+                description: '检查籍贯信息的有效性',
+                func: null
+            },
+            'checkChushengdi': {
+                name: '出生地检查',
+                englishName: 'checkBirthPlace',
+                category: '个人信息',
+                description: '检查出生地信息的有效性',
+                func: null
+            }
+        },
+        
+        // ==================== 规则分类 ====================
+        CATEGORIES: {
+            '个人信息': ['checkXuexing', 'checkLianxiDianhua', 'checkTixing', 'checkXianjuzhudizhi', 'checkJiguan', 'checkChushengdi'],
+            '家庭信息': ['checkHunyin', 'checkAirenQingkuang', 'checkDushengZinv'],
+            '教育信息': ['checkWenhuaChengdu', 'checkXuewei', 'checkRuxueRiqi', 'checkBiyeRiqi', 'checkBiyeYuanxiao', 'checkBiyeZhuanye'],
+            '工作信息': ['checkRenyuanLeibie', 'checkXingzhengZhiwu', 'checkXingzhengZhiwuRiqi', 'checkRuwudi', 'checkGongzuoRiqi', 'checkXuangaishiguanRiqi', 'checkGuhuazhucema', 'checkShibingZhucema'],
+            '证件信息': ['checkZhengjianBianhao', 'checkZhengjianleixing', 'checkShenfenzhengRiqi'],
+            '政治信息': ['checkZhengzhiMianmao', 'checkChaoYubeiDangyuanShijian'],
+            '单位信息': ['checkDanweizhudi', 'checkDanweizhudiXingzhengquhuadaima', 'checkZuzhiguanxiJigouMingcheng'],
+            '保障信息': ['checkYiliaoBaozhang', 'checkJicengYiliaoJigou', 'checkTixiYiyuan', 'checkGongxinFafang', 'checkBeizhuangFafang', 'checkFuzhuangdengjibiaohao', 'checkCaiwuDaiyuRenyuanLeibie']
+        },
+        
+        // ==================== 初始化 ====================
+        /**
+         * 初始化：将全局函数映射到规则对象
+         */
+        init: function() {
+            var mappedCount = 0;
+            var aliasCount = 0;
+            
+            for (var key in this.RULES) {
+                if (this.RULES.hasOwnProperty(key)) {
+                    // 填充函数引用
+                    if (typeof window[key] === 'function') {
+                        this.RULES[key].func = window[key];
+                        mappedCount++;
+                        
+                        // 创建英文别名
+                        var englishName = this.RULES[key].englishName;
+                        if (englishName && !window[englishName]) {
+                            window[englishName] = window[key];
+                            aliasCount++;
+                        }
+                    }
+                }
+            }
+            
+            if (window.Logger) {
+                window.Logger.log('RulesMapping 初始化完成: 映射了 ' + mappedCount + ' 个规则函数，创建了 ' + aliasCount + ' 个英文别名');
+            }
+        },
+        
+        // ==================== 获取规则函数 ====================
+        /**
+         * 获取规则函数（支持中英文名）
+         * @param {string} name - 规则名称（拼音或英文）
+         * @returns {Function|null} 规则函数
+         */
+        getRule: function(name) {
+            if (!name) return null;
+            
+            // 直接查找（拼音名）
+            if (this.RULES[name]) {
+                return this.RULES[name].func;
+            }
+            
+            // 按英文名查找
+            for (var key in this.RULES) {
+                if (this.RULES.hasOwnProperty(key)) {
+                    if (this.RULES[key].englishName === name) {
+                        return this.RULES[key].func;
+                    }
+                }
+            }
+            
+            // 尝试从 window 直接获取
+            if (typeof window[name] === 'function') {
+                return window[name];
+            }
+            
+            return null;
+        },
+        
+        // ==================== 获取规则信息 ====================
+        /**
+         * 获取规则信息
+         * @param {string} name - 规则名称
+         * @returns {Object|null} 规则信息对象
+         */
+        getRuleInfo: function(name) {
+            if (this.RULES[name]) {
+                return this.RULES[name];
+            }
+            
+            // 按英文名查找
+            for (var key in this.RULES) {
+                if (this.RULES.hasOwnProperty(key)) {
+                    if (this.RULES[key].englishName === name) {
+                        return this.RULES[key];
+                    }
+                }
+            }
+            
+            return null;
+        },
+        
+        // ==================== 按分类获取规则 ====================
+        /**
+         * 按分类获取规则列表
+         * @param {string} category - 分类名称
+         * @returns {Array} 规则信息数组
+         */
+        getRulesByCategory: function(category) {
+            var rules = [];
+            var ruleIds = this.CATEGORIES[category];
+            
+            if (!ruleIds) return rules;
+            
+            for (var i = 0; i < ruleIds.length; i++) {
+                var ruleId = ruleIds[i];
+                if (this.RULES[ruleId]) {
+                    rules.push(this.RULES[ruleId]);
+                }
+            }
+            
+            return rules;
+        },
+        
+        // ==================== 获取所有分类 ====================
+        /**
+         * 获取所有规则分类
+         * @returns {Array} 分类名称数组
+         */
+        getAllCategories: function() {
+            var categories = [];
+            for (var category in this.CATEGORIES) {
+                if (this.CATEGORIES.hasOwnProperty(category)) {
+                    categories.push(category);
+                }
+            }
+            return categories;
+        },
+        
+        // ==================== 获取所有规则 ====================
+        /**
+         * 获取所有规则信息
+         * @returns {Array} 规则信息数组
+         */
+        getAllRules: function() {
+            var rules = [];
+            for (var key in this.RULES) {
+                if (this.RULES.hasOwnProperty(key)) {
+                    rules.push(this.RULES[key]);
+                }
+            }
+            return rules;
+        }
+    };
+    
+    // 挂载到全局
+    window.RulesMapping = RulesMapping;
+    
+    // 页面加载完成后自动初始化
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            RulesMapping.init();
+        });
+    } else {
+        // 如果脚本加载时DOM已经ready，立即初始化
+        setTimeout(function() {
+            RulesMapping.init();
+        }, 100);
+    }
+    
+})(window);
+

@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<!-- HTML5文档类型声明 -->
+<html lang="zh-CN">
+<head>
+    <!-- 字符编码设置为UTF-8 -->
+    <meta charset="UTF-8">
+    <!-- 响应式设计视口设置 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- IE浏览器兼容性设置 -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <!-- 页面标题 -->
+    <title>保障卡数据检查工具</title>
+    
+    <!-- 样式文件 -->
+    <!-- 主样式表 -->
+    <link rel="stylesheet" href="资源/样式表.css">
+    <!-- 发卡收卡登记样式表 -->
+    <link rel="stylesheet" href="资源/发卡收卡登记.css">
+    <!-- Font Awesome图标字体库 -->
+    <link rel="stylesheet" href="资源/font-awesome.min.css">
+    
+    <!-- Firefox 45.0.2 CSS兼容性补丁（修复 gap 属性不支持问题）-->
+    <!-- 为旧版本Firefox浏览器提供的CSS兼容性支持 -->
+    <link rel="stylesheet" href="资源/火狐45兼容.css">
+    
+    <!-- 全局调试开关 -->
+    <script>
+        // 调试模式开关（设为 true 显示详细日志，false 隐藏日志）
+        window.DEBUG_MODE = false;
+        
+        // 调试日志函数（替代 console.log）
+        // 只有在调试模式开启时才会输出日志信息
+        window.debugLog = function() {
+            if (window.DEBUG_MODE) {
+                console.log.apply(console, arguments);
+            }
+        };
+        
+        // 调试信息函数（带颜色）
+        // 只有在调试模式开启时才会输出信息
+        window.debugInfo = function() {
+            if (window.DEBUG_MODE) {
+                console.info.apply(console, arguments);
+            }
+        };
+        
+        // 警告和错误始终显示
+        // 警告信息输出函数
+        window.debugWarn = console.warn.bind(console);
+        // 错误信息输出函数
+        window.debugError = console.error.bind(console);
+        
+        // 提示：如何启用调试模式
+        console.info('%c💡 调试模式已关闭', 'color: #4CAF50; font-weight: bold; font-size: 12px;');
+        console.info('%c   如需查看详细日志，请在控制台执行: window.DEBUG_MODE = true', 'color: #666; font-size: 11px;');
+        console.info('%c   然后刷新页面或重新执行操作', 'color: #666; font-size: 11px;');
+    </script>
+    
+    <!-- 第三方库：Excel文件处理 -->
+    <!-- SheetJS库，用于处理Excel文件的读取和导出 -->
+    <script src="资源/xlsx.full.min.js"></script>
+    
+    <!-- 性能监控脚本 -->
+    <!-- 用于监控页面性能和加载时间 -->
+    <script src="脚本/性能监控.js"></script>
+</head>
+<!-- 页面主体内容 -->
+<body>
+    <!-- 应用主容器 -->
+    <!-- 整个应用程序的最外层容器 -->
+    <div class="app-container">
+        <!-- 数据检查工具页面 -->
+        <!-- 数据检查功能的主页面，初始状态为隐藏 -->
+        <div id="checkToolPage" class="page-container" style="display: none;">
+            <!-- 页面头部 -->
+            <header class="app-header">
+                <div class="header-content">
+                    <!-- 头部左侧：标题和版本信息 -->
+                    <div class="header-left">
+                        <h1>
+                            <!-- 检查图标 -->
+                            <i class="fa fa-check-circle"></i> 保障卡数据检查工具 
+                            <!-- 版本号标记 -->
+                            <span class="version-badge">v3.0.7</span>
+                            <!-- 更新日志按钮 -->
+                            <button class="changelog-btn" onclick="showChangelog()">更新日志</button>
+                        </h1>
+                        <!-- 副标题：功能说明 -->
+                        <p class="subtitle">选择检查规则并上传Excel文件进行数据验证（兼容所有浏览器）</p>
+                    </div>
+                    <!-- 头部右侧：功能切换按钮 -->
+                    <div class="header-right">
+                        <!-- 使用方法帮助按钮 -->
+                        <button class="data-gen-btn" onclick="showUsageHelp('checker')">使用方法</button>
+                        <!-- 数据检查功能按钮 -->
+                        <button class="data-gen-btn" onclick="switchToChecker()"><i class="fa fa-check-circle"></i> 数据检查</button>
+                        <!-- 通知单处理功能按钮 -->
+                        <button class="data-gen-btn" onclick="openNotificationHandler()"><i class="fa fa-file-text"></i> 通知单处理</button>
+                        <!-- 数据生成功能按钮 -->
+                        <button class="data-gen-btn" onclick="switchToGenerator()"><i class="fa fa-magic"></i> 数据生成</button>
+                        <!-- 数据联审功能按钮 -->
+                        <button class="data-gen-btn" onclick="switchToAudit()"><i class="fa fa-exchange"></i> 数据联审</button>
+                        <!-- 发卡工具功能按钮 -->
+                        <button class="data-gen-btn" onclick="switchToCardTool()"><i class="fa fa-file-word-o"></i> 发卡工具</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 主内容区域：左右面板布局 -->
+            <!-- 页面主要内容区域，采用左右面板布局 -->
+            <div class="main-content">
+            <!-- 左侧面板：规则选择和文件上传 -->
+            <!-- 左侧面板，包含检查规则选择和文件上传功能 -->
+            <aside class="left-panel centered" id="leftPanel">
+                <!-- 规则选择区域 -->
+                <div class="rules-section">
+                    <!-- 规则区域头部 -->
+                    <div class="section-header">
+                        <h2><i class="fa fa-list-alt"></i> 检查规则</h2>
+                        <!-- 规则操作按钮 -->
+                        <div class="rules-actions">
+                            <!-- 全选/全不选按钮 -->
+                            <button class="action-btn small" id="toggleAllBtn" onclick="toggleAllRules()">全选</button>
+                        </div>
+                    </div>
+                    <!-- 规则网格容器，动态生成规则按钮 -->
+                    <div class="rules-container" id="rulesGrid"></div>
+                </div>
+
+                <!-- 文件上传区域 -->
+                <div class="upload-section">
+                    <h3><i class="fa fa-folder-open"></i> 选择文件</h3>
+                    <!-- 文件上传区域 -->
+                    <div class="upload-area" id="uploadArea">
+                        <!-- 上传图标 -->
+                        <div class="upload-icon"><i class="fa fa-file-excel-o"></i></div>
+                        <!-- 上传提示文本 -->
+                        <div class="upload-text">拖拽文件到此处或点击选择</div>
+                        <!-- 文件选择输入框，只接受Excel文件 -->
+                        <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls">
+                    </div>
+                    <!-- 文件列表显示容器 -->
+                    <div id="fileListContainer" class="file-display"></div>
+                </div>
+
+                <!-- 操作按钮区域 -->
+                <div class="action-section">
+                    <!-- 开始检查按钮，初始状态为禁用 -->
+                    <button id="validateBtn" class="validate-btn" onclick="validateFiles()" disabled>
+                        开始检查
+                    </button>
+                </div>
+            </aside>
+
+            <!-- 右侧面板：检查结果展示 -->
+            <!-- 右侧面板，用于显示检查结果，初始状态为隐藏 -->
+            <main class="right-panel" id="rightPanel" style="display: none;">
+                <!-- 结果面板头部 -->
+                <div class="results-header">
+                    <h2><i class="fa fa-bar-chart"></i> 检查结果</h2>
+                    <!-- 关闭结果面板按钮 -->
+                    <button class="close-results-btn" onclick="hideResults()" title="隐藏结果">×</button>
+                </div>
+                <!-- 结果内容容器 -->
+                <div id="resultsContainer" class="results-content"></div>
+            </main>
+            </div>
+        </div>
+
+        <!-- 数据生成工具页面 -->
+        <!-- 数据生成功能页面，初始状态为隐藏 -->
+        <div id="generatorToolPage" class="page-container" style="display: none;">
+            <header class="app-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <h1>
+                            <i class="fa fa-magic"></i> 数据生成工具
+                            <span class="version-badge">v3.0.7</span>
+                            <button class="changelog-btn" onclick="showChangelog()">更新日志</button>
+                        </h1>
+                        <p class="subtitle">选择生成工具并上传Excel文件，自动填充缺失数据</p>
+                    </div>
+                    <div class="header-right">
+                        <button class="data-gen-btn" onclick="showUsageHelp('generator')">使用方法</button>
+                        <button class="data-gen-btn" onclick="switchToChecker()"><i class="fa fa-check-circle"></i> 数据检查</button>
+                        <button class="data-gen-btn" onclick="openNotificationHandler()"><i class="fa fa-file-text"></i> 通知单处理</button>
+                        <button class="data-gen-btn" onclick="switchToGenerator()"><i class="fa fa-magic"></i> 数据生成</button>
+                        <button class="data-gen-btn" onclick="switchToAudit()"><i class="fa fa-exchange"></i> 数据联审</button>
+                        <button class="data-gen-btn" onclick="switchToCardTool()"><i class="fa fa-file-word-o"></i> 发卡工具</button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="main-content">
+                <aside class="left-panel centered" id="genLeftPanel">
+                    <div class="rules-section">
+                        <div class="section-header">
+                            <h2><i class="fa fa-magic"></i> 生成工具</h2>
+                            <div class="rules-actions">
+                                <button class="action-btn small" id="toggleAllGenBtn" onclick="toggleAllGenerators()">全选</button>
+                            </div>
+                        </div>
+                        <div class="rules-container" id="genToolsGrid"></div>
+                    </div>
+
+                    <div class="upload-section">
+                        <h3><i class="fa fa-folder-open"></i> 选择文件</h3>
+                        <div class="upload-area" id="genUploadArea">
+                            <div class="upload-icon"><i class="fa fa-file-excel-o"></i></div>
+                            <div class="upload-text">拖拽文件到此处或点击选择</div>
+                            <input type="file" id="genFileInput" class="file-input" accept=".xlsx,.xls">
+                        </div>
+                        <div id="genFileDisplay" class="file-display"></div>
+                    </div>
+
+                    <div class="action-section">
+                        <button id="generateBtn" class="validate-btn" onclick="generateData()" disabled>
+                            开始生成
+                        </button>
+                    </div>
+                </aside>
+
+                <main class="right-panel" id="genRightPanel" style="display: none;">
+                    <div class="results-header">
+                        <h2><i class="fa fa-bar-chart"></i> 生成结果</h2>
+                        <button class="close-results-btn" onclick="hideGenResults()" title="隐藏结果">×</button>
+                    </div>
+                    <div id="genResultContainer" class="results-content"></div>
+                </main>
+            </div>
+        </div>
+
+        <!-- 通知单处理页面 -->
+        <!-- 通知单处理功能页面，初始状态为隐藏 -->
+        <div id="notificationHandlerPage" class="page-container" style="display: none;">
+            <header class="app-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <h1>
+                            <i class="fa fa-file-text"></i> 通知单处理工具
+                            <span class="version-badge">v3.0.7</span>
+                            <button class="changelog-btn" onclick="showChangelog()">更新日志</button>
+                        </h1>
+                        <p class="subtitle">上传Excel文件进行通知单批量处理</p>
+                    </div>
+                    <div class="header-right">
+                        <button class="data-gen-btn" onclick="showUsageHelp('notification')">使用方法</button>
+                        <button class="data-gen-btn" onclick="switchToChecker()"><i class="fa fa-check-circle"></i> 数据检查</button>
+                        <button class="data-gen-btn" onclick="openNotificationHandler()"><i class="fa fa-file-text"></i> 通知单处理</button>
+                        <button class="data-gen-btn" onclick="switchToGenerator()"><i class="fa fa-magic"></i> 数据生成</button>
+                        <button class="data-gen-btn" onclick="switchToAudit()"><i class="fa fa-exchange"></i> 数据联审</button>
+                        <button class="data-gen-btn" onclick="switchToCardTool()"><i class="fa fa-file-word-o"></i> 发卡工具</button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="main-content">
+                <aside class="left-panel centered" id="notifLeftPanel">
+                    <div class="upload-section">
+                        <h3><i class="fa fa-folder-open"></i> 选择文件</h3>
+                        <div class="upload-area" id="notifUploadArea">
+                            <div class="upload-icon"><i class="fa fa-file-excel-o"></i></div>
+                            <div class="upload-text">拖拽文件到此处或点击选择</div>
+                            <input type="file" id="notifFileInput" class="file-input" accept=".xlsx,.xls">
+                        </div>
+                        <div id="notifFileDisplay" class="file-display"></div>
+                    </div>
+
+                    <div class="action-section">
+                        <button id="notifProcessBtn" class="validate-btn" onclick="processNotification()" disabled>
+                            开始处理
+                        </button>
+                    </div>
+                </aside>
+
+                <main class="right-panel" id="notifRightPanel" style="display: none;">
+                    <div class="results-header">
+                        <h2><i class="fa fa-bar-chart"></i> 处理结果</h2>
+                        <button class="close-results-btn" onclick="hideNotifResults()" title="隐藏结果">×</button>
+                    </div>
+                    <div id="notifResultContainer" class="results-content"></div>
+                </main>
+            </div>
+        </div>
+
+        <!-- 数据联审工具页面 -->
+        <!-- 数据联审功能页面，初始状态为隐藏 -->
+        <div id="auditToolPage" class="page-container" style="display: none;">
+            <header class="app-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <h1>
+                            <i class="fa fa-exchange"></i> 数据联审工具
+                            <span class="version-badge">v3.0.7</span>
+                            <button class="changelog-btn" onclick="showChangelog()">更新日志</button>
+                        </h1>
+                        <p class="subtitle">上传多个Excel文件进行数据交叉比对和联合审核</p>
+                    </div>
+                    <div class="header-right">
+                        <button class="data-gen-btn" onclick="showUsageHelp('audit')">使用方法</button>
+                        <button class="data-gen-btn" onclick="switchToChecker()"><i class="fa fa-check-circle"></i> 数据检查</button>
+                        <button class="data-gen-btn" onclick="openNotificationHandler()"><i class="fa fa-file-text"></i> 通知单处理</button>
+                        <button class="data-gen-btn" onclick="switchToGenerator()"><i class="fa fa-magic"></i> 数据生成</button>
+                        <button class="data-gen-btn" onclick="switchToAudit()"><i class="fa fa-exchange"></i> 数据联审</button>
+                        <button class="data-gen-btn" onclick="switchToCardTool()"><i class="fa fa-file-word-o"></i> 发卡工具</button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="main-content">
+                <aside class="left-panel centered" id="auditLeftPanel">
+                    <div class="rules-section">
+                        <div class="section-header">
+                            <h2><i class="fa fa-cogs"></i> 联审功能</h2>
+                        </div>
+                        <div class="audit-tools-grid">
+                            <button class="audit-tool-btn" onclick="openDiffAudit()">
+                                <div class="audit-icon"><i class="fa fa-minus-circle"></i></div>
+                                <div class="audit-name">保障卡与人资差额</div>
+                                <div class="audit-desc">比对保障卡与人资数据差异</div>
+                            </button>
+                            <button class="audit-tool-btn" onclick="openDataMerge()">
+                                <div class="audit-icon"><i class="fa fa-compress"></i></div>
+                                <div class="audit-name">数据整合</div>
+                                <div class="audit-desc">以修改版补充原始文件</div>
+                            </button>
+                            <button class="audit-tool-btn" onclick="openComprehensiveCheck()">
+                                <div class="audit-icon"><i class="fa fa-th"></i></div>
+                                <div class="audit-name">保障卡综合数据检查</div>
+                                <div class="audit-desc">检查保障卡与人资、财务、被装数据一致性</div>
+                            </button>
+                            <button class="audit-tool-btn" onclick="openFamilyCheck()">
+                                <div class="audit-icon"><i class="fa fa-users"></i></div>
+                                <div class="audit-name">军人已注销家属状况正常</div>
+                                <div class="audit-desc">核查已注销军人的家属信息</div>
+                            </button>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+
+        <!-- 发卡工具页面 -->
+        <!-- 发卡工具功能页面，初始状态为隐藏 -->
+        <div id="cardToolPage" class="page-container" style="display: none;">
+            <header class="app-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <h1>
+                            <i class="fa fa-file-word-o"></i> 发卡工具
+                            <span class="version-badge">v3.0.7</span>
+                            <button class="changelog-btn" onclick="showChangelog()">更新日志</button>
+                        </h1>
+                        <p class="subtitle">Word表格转换 & 发卡收卡登记管理</p>
+                    </div>
+                    <div class="header-right">
+                        <button class="data-gen-btn" onclick="showCardHelp()">使用方法</button>
+                        <button class="data-gen-btn" onclick="switchToChecker()"><i class="fa fa-check-circle"></i> 数据检查</button>
+                        <button class="data-gen-btn" onclick="openNotificationHandler()"><i class="fa fa-file-text"></i> 通知单处理</button>
+                        <button class="data-gen-btn" onclick="switchToGenerator()"><i class="fa fa-magic"></i> 数据生成</button>
+                        <button class="data-gen-btn" onclick="switchToAudit()"><i class="fa fa-exchange"></i> 数据联审</button>
+                        <button class="data-gen-btn" onclick="switchToCardTool()"><i class="fa fa-file-word-o"></i> 发卡工具</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 标签页导航 -->
+            <div style="background: white; border-bottom: 2px solid #e0e0e0; padding: 0 30px;">
+                <div style="display: flex; gap: 5px;">
+                    <button id="convertTabBtn" class="tab-btn active" onclick="switchCardToolTab('convert')">
+                        <i class="fa fa-exchange"></i> 表格转换
+                    </button>
+                    <button id="registryTabBtn" class="tab-btn" onclick="switchCardToolTab('registry')">
+                        <i class="fa fa-id-card"></i> 发卡收卡登记
+                    </button>
+                    
+                </div>
+            </div>
+
+            <!-- 表格转换标签页 -->
+            <div id="cardConvertTab" class="tab-content" style="display: block;">
+                <div class="main-content">
+                    <aside class="left-panel centered" id="cardLeftPanel">
+                        <div class="upload-section">
+                            <h3><i class="fa fa-paste"></i> 粘贴Word表格数据</h3>
+                            <div style="margin: 15px 0;">
+                                <textarea 
+                                    id="cardTableInput" 
+                                    placeholder="请从Word文档中复制内容，然后粘贴到这里...&#10;&#10;[操作步骤]&#10;1. 打开Word文档&#10;2. 选中整个内容（包括标题、单位名称、表格等）&#10;3. 按Ctrl+A全选或选中需要的部分&#10;4. 按Ctrl+C复制&#10;5. 在此处按Ctrl+V粘贴&#10;6. 点击下方“解析并预览”按钮&#10;&#10;[提示]&#10;• 支持自动提取“单位名称”和“时间”信息&#10;• 支持Ⅰ、Ⅱ、Ⅲ、Ⅳ型卡自动分类&#10;• 可以复制整个Word页面，系统会自动识别表格"
+                                    style="width: 100%; min-height: 300px; padding: 15px; font-family: 'Microsoft YaHei', sans-serif; font-size: 13px; border: 2px dashed #667eea; border-radius: 8px; resize: vertical; line-height: 1.6;"
+                                ></textarea>
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                <button class="validate-btn" onclick="handleCardPaste()" style="flex: 1;">
+                                    <i class="fa fa-search"></i> 解析并预览
+                                </button>
+                                <button class="action-btn danger" onclick="clearCardInput()">
+                                    <i class="fa fa-trash"></i> 清空
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="action-section" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button id="downloadCardExcelBtn" class="validate-btn" style="flex: 1; min-width: 180px;" onclick="downloadCardExcel()" disabled>
+                                <i class="fa fa-download"></i> 下载Excel
+                            </button>
+                            <button id="importToIssueBtn" class="validate-btn" style="flex: 1; min-width: 180px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);" onclick="importToCardRegistry('issue')" disabled>
+                                <i class="fa fa-arrow-right"></i> 导入到发卡登记
+                            </button>
+                            <button id="importToRecycleBtn" class="validate-btn" style="flex: 1; min-width: 180px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);" onclick="importToCardRegistry('recycle')" disabled>
+                                <i class="fa fa-reply"></i> 导入到收卡登记
+                            </button>
+                        </div>
+                    </aside>
+
+                    <main class="right-panel" id="cardRightPanel" style="display: none;">
+                        <div class="results-header">
+                            <h2><i class="fa fa-table"></i> 表格预览</h2>
+                        </div>
+                        <div id="cardTablePreview" class="results-content" style="padding: 20px;">
+                            <p style="color: #999; text-align: center; padding: 50px 0;">
+                                <i class="fa fa-table" style="font-size: 48px; margin-bottom: 15px; display: block;"></i>
+                                粘贴表格数据后，这里将显示预览
+                            </p>
+                        </div>
+                    </main>
+                </div>
+            </div>
+
+            <!-- 发卡收卡登记标签页 -->
+            <div id="cardRegistryTab" class="tab-content" style="display: none;">
+                <div class="registry-wrapper">
+                    <div class="registry-header">
+                        <div class="registry-header-row">
+                            <div class="registry-subtabs">
+                                <button id="issueSubTabBtn" class="subtab-btn active" onclick="REG.switchSubTab('issue')"><i class="fa fa-send"></i> 发卡登记</button>
+                                <button id="recycleSubTabBtn" class="subtab-btn" onclick="REG.switchSubTab('recycle')"><i class="fa fa-reply"></i> 收卡登记</button>
+                            </div>
+                            <!-- 未领取警告横幅（移到标签旁边） -->
+                            <div id="unclaimedWarning" class="unclaimed-warning-inline" style="display: none;"></div>
+                            <div class="registry-actions">
+                                <button class="btn-template" onclick="REG.downloadTemplate()"><i class="fa fa-file-excel-o"></i> 模板</button>
+                                <input type="file" id="excelImportInput" accept=".xlsx,.xls" style="display: none;" onchange="REG.importExcel(this)" />
+                                <button class="btn-import" onclick="document.getElementById('excelImportInput').click()"><i class="fa fa-upload"></i> 导入</button>
+                                <input type="file" id="familyRelationImportInput" accept=".xlsx,.xls" style="display: none;" onchange="REG.importFamilyRelation(this)" />
+                                <button class="btn-import" style="background: #e67e22;" onclick="document.getElementById('familyRelationImportInput').click()"><i class="fa fa-users"></i> 导入家属关联</button>
+                                <button class="btn-export" onclick="REG.exportExcel()"><i class="fa fa-download"></i> 导出</button>
+                                
+                                <!-- 数据管理 -->
+                                <div class="data-manage-dropdown">
+                                    <button class="btn-data-manage" onclick="REG.toggleDataManageMenu()"><i class="fa fa-database"></i> 数据管理</button>
+                                    <div class="data-manage-menu" id="dataManageMenu">
+                                        <div class="data-manage-item" onclick="REG.backupCurrentData()">
+                                            <i class="fa fa-download"></i> 备份当前数据
+                                        </div>
+                                        <div class="data-manage-item" onclick="REG.backupAllData()">
+                                            <i class="fa fa-cloud-download"></i> 备份全部数据
+                                        </div>
+                                        <div class="data-manage-item" onclick="document.getElementById('restoreDataInput').click()">
+                                            <i class="fa fa-cloud-upload"></i> 恢复数据
+                                        </div>
+                                        <div class="data-manage-item danger" onclick="REG.clearAllData()">
+                                            <i class="fa fa-trash"></i> 清空当前数据
+                                        </div>
+                                    </div>
+                                </div>
+                                <input type="file" id="restoreDataInput" accept=".json" style="display: none;" onchange="REG.restoreData(this)" />
+                            </div>
+                        </div>
+                    </div>
+                    <div id="registryIssueTab" style="display: block;">
+                        <div class="filter-cards-container">
+                            <div class="parent-filter-card" data-status="已发卡" onclick="REG.filterByCard('已发卡', '')">
+                                <div class="parent-card-header">
+                                    <span class="parent-card-title">已发卡</span>
+                                    <span class="parent-card-total" id="issued-total">0</span>
+                                </div>
+                                <div class="child-filter-cards">
+                                    <div class="child-filter-card" data-status="已发卡" data-type="Ⅰ类卡" onclick="event.stopPropagation(); REG.filterByCard('已发卡', 'Ⅰ类卡')">
+                                        <div class="child-card-type">Ⅰ类卡</div>
+                                        <div class="child-card-count" id="issued-1">0</div>
+                                    </div>
+                                    <div class="child-filter-card" data-status="已发卡" data-type="Ⅱ类卡" onclick="event.stopPropagation(); REG.filterByCard('已发卡', 'Ⅱ类卡')">
+                                        <div class="child-card-type">Ⅱ类卡</div>
+                                        <div class="child-card-count" id="issued-2">0</div>
+                                    </div>
+                                    <div class="child-filter-card" data-status="已发卡" data-type="Ⅲ类卡" onclick="event.stopPropagation(); REG.filterByCard('已发卡', 'Ⅲ类卡')">
+                                        <div class="child-card-type">Ⅲ类卡</div>
+                                        <div class="child-card-count" id="issued-3">0</div>
+                                    </div>
+                                    <div class="child-filter-card" data-status="已发卡" data-type="Ⅳ类卡" onclick="event.stopPropagation(); REG.filterByCard('已发卡', 'Ⅳ类卡')">
+                                        <div class="child-card-type">Ⅳ类卡</div>
+                                        <div class="child-card-count" id="issued-4">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="parent-filter-card" data-status="未发卡" onclick="REG.filterByCard('未发卡', '')">
+                                <div class="parent-card-header">
+                                    <span class="parent-card-title">未发卡</span>
+                                    <span class="parent-card-total" id="pending-total">0</span>
+                                </div>
+                                <div class="child-filter-cards">
+                                    <div class="child-filter-card" data-status="未发卡" data-type="Ⅰ类卡" onclick="event.stopPropagation(); REG.filterByCard('未发卡', 'Ⅰ类卡')">
+                                        <div class="child-card-type">Ⅰ类卡</div>
+                                        <div class="child-card-count" id="pending-1">0</div>
+                                    </div>
+                                    <div class="child-filter-card" data-status="未发卡" data-type="Ⅱ类卡" onclick="event.stopPropagation(); REG.filterByCard('未发卡', 'Ⅱ类卡')">
+                                        <div class="child-card-type">Ⅱ类卡</div>
+                                        <div class="child-card-count" id="pending-2">0</div>
+                                    </div>
+                                    <div class="child-filter-card" data-status="未发卡" data-type="Ⅲ类卡" onclick="event.stopPropagation(); REG.filterByCard('未发卡', 'Ⅲ类卡')">
+                                        <div class="child-card-type">Ⅲ类卡</div>
+                                        <div class="child-card-count" id="pending-3">0</div>
+                                    </div>
+                                    <div class="child-filter-card" data-status="未发卡" data-type="Ⅳ类卡" onclick="event.stopPropagation(); REG.filterByCard('未发卡', 'Ⅳ类卡')">
+                                        <div class="child-card-type">Ⅳ类卡</div>
+                                        <div class="child-card-count" id="pending-4">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 搜索栏和新增按钮 -->
+                        <div class="search-and-add-bar">
+                            <div class="search-bar search-bar-compact">
+                                <i class="fa fa-search search-icon"></i>
+                                <input type="text" id="issueSearchInput" class="search-bar-input" placeholder="搜索姓名/部别/保障卡号（支持拼音首字母）" onkeyup="REG.search()" />
+                                <span class="search-bar-count" id="issueSearchCount"></span>
+                                <button class="search-bar-clear" onclick="REG.clearSearch()" title="清空搜索"><i class="fa fa-times"></i></button>
+                            </div>
+                        <select class="year-filter" id="issueYearFilterByIssueDate" onchange="REG.filterByYear()">
+                            <option value="">发卡年度</option>
+                        </select>
+                        <input type="text" class="date-filter" id="issueStartDate" placeholder="发卡开始(20240101)" onchange="REG.filterByDateRange()" />
+                        <span style="color: #999;">至</span>
+                        <input type="text" class="date-filter" id="issueEndDate" placeholder="发卡结束(20240131)" onchange="REG.filterByDateRange()" />
+                        <select class="year-filter" id="issueYearFilterByReceiveDate" onchange="REG.filterByYear()">
+                            <option value="">领卡年度</option>
+                        </select>
+                        <input type="text" class="date-filter" id="receiveStartDate" placeholder="领卡开始(20240101)" onchange="REG.filterByDateRange()" />
+                        <span style="color: #999;">至</span>
+                        <input type="text" class="date-filter" id="receiveEndDate" placeholder="领卡结束(20240131)" onchange="REG.filterByDateRange()" />
+                            <button class="btn-batch-edit" id="issueBatchEditBtn" onclick="REG.openBatchEdit()" style="display: none;"><i class="fa fa-edit"></i> 批量修改</button>
+                            <div class="print-dropdown">
+                                <button class="btn-print" onclick="REG.togglePrintMenu('issue')"><i class="fa fa-print"></i> 打印</button>
+                                <div class="print-menu" id="issuePrintMenu">
+                                    <div class="print-menu-item" onclick="REG.print('all', 'issue')"><i class="fa fa-list"></i> 全部打印</div>
+                                    <div class="print-menu-item" onclick="REG.print('page', 'issue')"><i class="fa fa-file-text-o"></i> 页面打印</div>
+                                    <div class="print-menu-item" onclick="REG.print('selected', 'issue')"><i class="fa fa-check-square-o"></i> 选中打印</div>
+                                </div>
+                            </div>
+                            <button class="btn-add-inline" onclick="REG.addInlineRow()"><i class="fa fa-plus"></i> 新增</button>
+                        </div>
+                        <div class="table-wrapper">
+                            <table class="registry-table">
+                                <thead>
+                                    <tr>
+                                        <th class="checkbox-col"><input type="checkbox" id="issueSelectAll" onchange="REG.toggleSelectAll('issue')" /></th>
+                                        <th class="index-col">序号</th>
+                                        <th class="sortable" data-column="department" onclick="REG.sortTable('department')">部别</th>
+                                        <th class="sortable" data-column="name" onclick="REG.sortTable('name')">姓名</th>
+                                        <th class="sortable" data-column="idNumber" onclick="REG.sortTable('idNumber')">身份证号码</th>
+                                        <th class="sortable" data-column="cardNumber" onclick="REG.sortTable('cardNumber')">保障卡号</th>
+                                        <th class="sortable" data-column="cardType" onclick="REG.sortTable('cardType')">卡类型</th>
+                                        <th class="sortable" data-column="cardStatus" onclick="REG.sortTable('cardStatus')">发卡状态</th>
+                                        <th class="sortable" data-column="issueDate" onclick="REG.sortTable('issueDate')">发卡日期</th>
+                                        <th class="sortable" data-column="receiveDate" onclick="REG.sortTable('receiveDate')">领卡日期</th>
+                                        <th class="sortable" data-column="remark" onclick="REG.sortTable('remark')">备注</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="issueTableBody">
+                                    <tr class="empty-row"><td colspan="12"><div class="empty">暂无发卡记录</div></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="issuePagination" class="pagination-container"></div>
+                    </div>
+                    <div id="registryRecycleTab" style="display: none;">
+                        <div class="filter-cards-container">
+                            <!-- 已回收：两行横向排列 -->
+                            <div class="parent-filter-card" data-status="done" onclick="REG.filterRecycleCard('done', '', '')">
+                                <div class="parent-card-header">
+                                    <span class="parent-card-title">已回收</span>
+                                    <span class="parent-card-total" id="recycle-done-total">0</span>
+                                </div>
+                                <div class="child-filter-cards-rows">
+                                    <!-- 第一行：卡类型 -->
+                                    <div class="child-filter-cards">
+                                        <div class="child-filter-card" data-status="done" data-cardtype="Ⅰ类卡" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '', 'Ⅰ类卡')">
+                                            <div class="child-card-type">Ⅰ类卡</div>
+                                            <div class="child-card-count" id="recycle-done-type1">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="done" data-cardtype="Ⅱ类卡" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '', 'Ⅱ类卡')">
+                                            <div class="child-card-type">Ⅱ类卡</div>
+                                            <div class="child-card-count" id="recycle-done-type2">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="done" data-cardtype="Ⅲ类卡" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '', 'Ⅲ类卡')">
+                                            <div class="child-card-type">Ⅲ类卡</div>
+                                            <div class="child-card-count" id="recycle-done-type3">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="done" data-cardtype="Ⅳ类卡" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '', 'Ⅳ类卡')">
+                                            <div class="child-card-type">Ⅳ类卡</div>
+                                            <div class="child-card-count" id="recycle-done-type4">0</div>
+                                        </div>
+                                    </div>
+                                    <!-- 第二行：回收类型 -->
+                                    <div class="child-filter-cards">
+                                        <div class="child-filter-card" data-status="done" data-reason="退伍回收" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '退伍回收', '')">
+                                            <div class="child-card-type">退伍</div>
+                                            <div class="child-card-count" id="recycle-done-reason1">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="done" data-reason="复员回收" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '复员回收', '')">
+                                            <div class="child-card-type">复员</div>
+                                            <div class="child-card-count" id="recycle-done-reason2">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="done" data-reason="转业回收" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '转业回收', '')">
+                                            <div class="child-card-type">转业</div>
+                                            <div class="child-card-count" id="recycle-done-reason3">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="done" data-reason="损坏回收" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '损坏回收', '')">
+                                            <div class="child-card-type">损坏</div>
+                                            <div class="child-card-count" id="recycle-done-reason4">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="done" data-reason="纠错回收" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '纠错回收', '')">
+                                            <div class="child-card-type">纠错</div>
+                                            <div class="child-card-count" id="recycle-done-reason5">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="done" data-reason="更换回收" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '更换回收', '')">
+                                            <div class="child-card-type">更换</div>
+                                            <div class="child-card-count" id="recycle-done-reason6">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="done" data-reason="消磁回收" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '消磁回收', '')">
+                                            <div class="child-card-type">消磁</div>
+                                            <div class="child-card-count" id="recycle-done-reason7">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="done" data-reason="其他原因回收" onclick="event.stopPropagation(); REG.filterRecycleCard('done', '其他原因回收', '')">
+                                            <div class="child-card-type">其他</div>
+                                            <div class="child-card-count" id="recycle-done-reason8">0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 未回收：两行横向排列 -->
+                            <div class="parent-filter-card" data-status="pending" onclick="REG.filterRecycleCard('pending', '', '')">
+                                <div class="parent-card-header">
+                                    <span class="parent-card-title">未回收</span>
+                                    <span class="parent-card-total" id="recycle-pending-total">0</span>
+                                </div>
+                                <div class="child-filter-cards-rows">
+                                    <!-- 第一行：卡类型 -->
+                                    <div class="child-filter-cards">
+                                        <div class="child-filter-card" data-status="pending" data-cardtype="Ⅰ类卡" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '', 'Ⅰ类卡')">
+                                            <div class="child-card-type">Ⅰ类卡</div>
+                                            <div class="child-card-count" id="recycle-pending-type1">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="pending" data-cardtype="Ⅱ类卡" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '', 'Ⅱ类卡')">
+                                            <div class="child-card-type">Ⅱ类卡</div>
+                                            <div class="child-card-count" id="recycle-pending-type2">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="pending" data-cardtype="Ⅲ类卡" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '', 'Ⅲ类卡')">
+                                            <div class="child-card-type">Ⅲ类卡</div>
+                                            <div class="child-card-count" id="recycle-pending-type3">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="pending" data-cardtype="Ⅳ类卡" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '', 'Ⅳ类卡')">
+                                            <div class="child-card-type">Ⅳ类卡</div>
+                                            <div class="child-card-count" id="recycle-pending-type4">0</div>
+                                        </div>
+                                    </div>
+                                    <!-- 第二行：回收类型 -->
+                                    <div class="child-filter-cards">
+                                        <div class="child-filter-card" data-status="pending" data-reason="退伍回收" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '退伍回收', '')">
+                                            <div class="child-card-type">退伍</div>
+                                            <div class="child-card-count" id="recycle-pending-reason1">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="pending" data-reason="复员回收" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '复员回收', '')">
+                                            <div class="child-card-type">复员</div>
+                                            <div class="child-card-count" id="recycle-pending-reason2">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="pending" data-reason="转业回收" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '转业回收', '')">
+                                            <div class="child-card-type">转业</div>
+                                            <div class="child-card-count" id="recycle-pending-reason3">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="pending" data-reason="损坏回收" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '损坏回收', '')">
+                                            <div class="child-card-type">损坏</div>
+                                            <div class="child-card-count" id="recycle-pending-reason4">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="pending" data-reason="纠错回收" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '纠错回收', '')">
+                                            <div class="child-card-type">纠错</div>
+                                            <div class="child-card-count" id="recycle-pending-reason5">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="pending" data-reason="更换回收" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '更换回收', '')">
+                                            <div class="child-card-type">更换</div>
+                                            <div class="child-card-count" id="recycle-pending-reason6">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="pending" data-reason="消磁回收" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '消磁回收', '')">
+                                            <div class="child-card-type">消磁</div>
+                                            <div class="child-card-count" id="recycle-pending-reason7">0</div>
+                                        </div>
+                                        <div class="child-filter-card" data-status="pending" data-reason="其他原因回收" onclick="event.stopPropagation(); REG.filterRecycleCard('pending', '其他原因回收', '')">
+                                            <div class="child-card-type">其他</div>
+                                            <div class="child-card-count" id="recycle-pending-reason8">0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 搜索栏和新增按钮 -->
+                        <div class="search-and-add-bar">
+                            <div class="search-bar search-bar-compact">
+                                <i class="fa fa-search search-icon"></i>
+                                <input type="text" id="recycleSearchInput" class="search-bar-input" placeholder="搜索姓名/部别/保障卡号（支持拼音首字母）" onkeyup="REG.search()" />
+                                <span class="search-bar-count" id="recycleSearchCount"></span>
+                                <button class="search-bar-clear" onclick="REG.clearSearch()" title="清空搜索"><i class="fa fa-times"></i></button>
+                            </div>
+                        <select class="year-filter" id="recycleYearFilter" onchange="REG.filterByYear()">
+                            <option value="">回收年度</option>
+                        </select>
+                        <input type="text" class="date-filter" id="recycleStartDate" placeholder="回收开始(20240101)" onchange="REG.filterByDateRange()" />
+                        <span style="color: #999;">至</span>
+                        <input type="text" class="date-filter" id="recycleEndDate" placeholder="回收结束(20240131)" onchange="REG.filterByDateRange()" />
+                            <button class="btn-batch-edit" id="recycleBatchEditBtn" onclick="REG.openBatchEdit()" style="display: none;"><i class="fa fa-edit"></i> 批量修改</button>
+                            <div class="print-dropdown">
+                                <button class="btn-print" onclick="REG.togglePrintMenu('recycle')"><i class="fa fa-print"></i> 打印</button>
+                                <div class="print-menu" id="recyclePrintMenu">
+                                    <div class="print-menu-item" onclick="REG.print('all', 'recycle')"><i class="fa fa-list"></i> 全部打印</div>
+                                    <div class="print-menu-item" onclick="REG.print('page', 'recycle')"><i class="fa fa-file-text-o"></i> 页面打印</div>
+                                    <div class="print-menu-item" onclick="REG.print('selected', 'recycle')"><i class="fa fa-check-square-o"></i> 选中打印</div>
+                                </div>
+                            </div>
+                            <button class="btn-add-inline" onclick="REG.addInlineRow()"><i class="fa fa-plus"></i> 新增</button>
+                        </div>
+                        <div class="table-wrapper">
+                            <table class="registry-table">
+                                <thead>
+                                    <tr>
+                                        <th class="checkbox-col"><input type="checkbox" id="recycleSelectAll" onchange="REG.toggleSelectAll('recycle')" /></th>
+                                        <th class="index-col">序号</th>
+                                        <th class="sortable" data-column="department" onclick="REG.sortTable('department')">部别</th>
+                                        <th class="sortable" data-column="name" onclick="REG.sortTable('name')">姓名</th>
+                                        <th class="sortable" data-column="idNumber" onclick="REG.sortTable('idNumber')">身份证号码</th>
+                                        <th class="sortable" data-column="cardNumber" onclick="REG.sortTable('cardNumber')">保障卡号</th>
+                                        <th class="sortable" data-column="cardType" onclick="REG.sortTable('cardType')">卡类型</th>
+                                        <th class="sortable" data-column="status" onclick="REG.sortTable('status')">回收状态</th>
+                                        <th class="sortable" data-column="reason" onclick="REG.sortTable('reason')">回收类型</th>
+                                        <th class="sortable" data-column="recycleDate" onclick="REG.sortTable('recycleDate')">回收日期</th>
+                                        <th class="sortable" data-column="remark" onclick="REG.sortTable('remark')">备注</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recycleTableBody">
+                                    <tr class="empty-row"><td colspan="12"><div class="empty">暂无收卡记录</div></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="recyclePagination" class="pagination-container"></div>
+                    </div>
+                </div>
+            </div>
+
+            
+        </div>
+
+        <!-- 批量修改模态框 -->
+        <div id="batchEditModal" class="modal" style="display: none;">
+            <div class="modal-content batch-edit-modal">
+                <div class="modal-header">
+                    <h2><i class="fa fa-edit"></i> 批量修改 <span id="batchEditCount"></span></h2>
+                    <button class="close-modal-btn" onclick="REG.closeBatchEdit()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="batch-tips">
+                        <i class="fa fa-info-circle"></i> 只修改已填写的字段，空白字段保持不变
+                    </div>
+                    <div class="batch-form">
+                        <div class="batch-row">
+                            <label>部别</label>
+                            <input type="text" id="batchEditDepartment" placeholder="留空表示不修改" />
+                        </div>
+                        <div class="batch-row">
+                            <label>卡类型</label>
+                            <select id="batchEditCardType">
+                                <option value="">不修改</option>
+                                <option value="Ⅰ类卡">Ⅰ类卡</option>
+                                <option value="Ⅱ类卡">Ⅱ类卡</option>
+                                <option value="Ⅲ类卡">Ⅲ类卡</option>
+                                <option value="Ⅳ类卡">Ⅳ类卡</option>
+                            </select>
+                        </div>
+                        <!-- 发卡字段 -->
+                        <div class="batch-row" id="batchCardStatusItem">
+                            <label>发卡状态</label>
+                            <select id="batchEditCardStatus">
+                                <option value="">不修改</option>
+                                <option value="未发卡">未发卡</option>
+                                <option value="已发卡">已发卡</option>
+                            </select>
+                        </div>
+                        <div class="batch-row" id="batchIssueDateItem">
+                            <label>发卡日期</label>
+                            <input type="date" id="batchEditIssueDate" />
+                        </div>
+                        <div class="batch-row" id="batchReceiveDateItem">
+                            <label>领卡日期</label>
+                            <input type="date" id="batchEditReceiveDate" />
+                        </div>
+                        <!-- 回收字段 -->
+                        <div class="batch-row" id="batchRecycleStatusItem">
+                            <label>回收状态</label>
+                            <select id="batchEditRecycleStatus">
+                                <option value="">不修改</option>
+                                <option value="pending">未回收</option>
+                                <option value="done">已回收</option>
+                            </select>
+                        </div>
+                        <div class="batch-row" id="batchRecycleReasonItem">
+                            <label>回收类型</label>
+                            <select id="batchEditRecycleReason">
+                                <option value="">不修改</option>
+                                <option value="退伍回收">退伍回收</option>
+                                <option value="复员回收">复员回收</option>
+                                <option value="转业回收">转业回收</option>
+                                <option value="损坏回收">损坏回收</option>
+                                <option value="纠错回收">纠错回收</option>
+                                <option value="更换回收">更换回收</option>
+                                <option value="消磁回收">消磁回收</option>
+                                <option value="其他原因回收">其他原因回收</option>
+                            </select>
+                        </div>
+                        <div class="batch-row" id="batchRecycleDateItem">
+                            <label>回收日期</label>
+                            <input type="date" id="batchEditRecycleDate" />
+                        </div>
+                        <div class="batch-row">
+                            <label>备注</label>
+                            <input type="text" id="batchEditRemark" placeholder="留空表示不修改" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-modal cancel" onclick="REG.closeBatchEdit()"><i class="fa fa-times"></i> 取消</button>
+                    <button class="btn-modal confirm" onclick="REG.applyBatchEdit()"><i class="fa fa-check"></i> 应用</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="diffAuditModal" class="modal" style="display: none;">
+            <div class="modal-content audit-modal">
+                <div class="modal-header">
+                    <h2><i class="fa fa-minus-circle"></i> 保障卡与人资差额</h2>
+                    <button class="close-modal-btn" onclick="closeDiffAudit()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="diff-upload-section diff-upload-vertical">
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-id-card"></i> 后勤供应实力<span class="required-mark">*</span></h3>
+                            <div class="upload-area small" id="file1UploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择</div>
+                                <input type="file" id="file1Input" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="file1Display" class="file-display"></div>
+                        </div>
+
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-user"></i> 人力资源实力<span class="required-mark">*</span></h3>
+                            <div class="upload-area small" id="file2UploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择</div>
+                                <input type="file" id="file2Input" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="file2Display" class="file-display"></div>
+                        </div>
+
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-bell"></i> 通知单查询列表<span class="optional-mark">(可选)</span></h3>
+                            <div class="upload-area small" id="file3UploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择（可选）</div>
+                                <input type="file" id="file3Input" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="file3Display" class="file-display"></div>
+                        </div>
+                    </div>
+
+                    <div class="diff-settings">
+                        <button class="download-template-btn" onclick="downloadDiffTemplate()">
+                            <i class="fa fa-download"></i> 下载Excel样表
+                        </button>
+                        <span style="margin-left: 10px; color: #666; font-size: 13px;">（样表包含：姓名、部门、公民身份号码、军衔级别）</span>
+                    </div>
+
+                    <div class="diff-actions">
+                        <button id="compareBtn" class="compare-btn" onclick="compareDiff()" disabled>
+                            <i class="fa fa-search"></i> 开始比对
+                        </button>
+                    </div>
+
+                    <div id="diffResultContainer" class="diff-result-container" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="dataMergeModal" class="modal" style="display: none;">
+            <div class="modal-content audit-modal">
+                <div class="modal-header">
+                    <h2><i class="fa fa-compress"></i> 数据整合</h2>
+                    <button class="close-modal-btn" onclick="closeDataMerge()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="diff-upload-section diff-upload-vertical">
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-archive"></i> 原始文件<span class="required-mark">*</span></h3>
+                            <div class="upload-area small" id="mergeOriginalUploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择</div>
+                                <input type="file" id="mergeOriginalInput" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="mergeOriginalDisplay" class="file-display"></div>
+                        </div>
+
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-edit"></i> 修改后文件<span class="required-mark">*</span></h3>
+                            <p class="upload-tip">支持一次选择或拖拽多个文件，系统会自动合并去重</p>
+                            <div class="upload-area small" id="mergeUpdatedUploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择（支持多选）</div>
+                                <input type="file" id="mergeUpdatedInput" class="file-input" accept=".xlsx,.xls" multiple>
+                            </div>
+                            <div id="mergeUpdatedDisplay" class="file-display"></div>
+                        </div>
+                    </div>
+
+                    <div class="diff-settings">
+                        <p style="margin: 0; font-size: 13px; color: #666;">
+                            根据 <strong>公民身份号码</strong> 对两份文件进行整合：以修改后文件为准，
+                            对原始文件缺失字段进行补充，同时保留修改后的行集合。
+                        </p>
+                        <div class="merge-legend">
+                            <div class="merge-legend-item">
+                                <span class="legend-color legend-modified"></span>
+                                <span>修改过的字段（黄色）</span>
+                            </div>
+                            <div class="merge-legend-item">
+                                <span class="legend-color legend-backfilled"></span>
+                                <span>补齐/新增的字段（橙色）</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="diff-actions">
+                        <button id="mergeBtn" class="compare-btn" onclick="integrateDataFiles()" disabled>
+                            <i class="fa fa-compress"></i> 开始整合
+                        </button>
+                    </div>
+
+                    <div id="dataMergeResultContainer" class="diff-result-container" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="comprehensiveCheckModal" class="modal" style="display: none;">
+            <div class="modal-content audit-modal">
+                <div class="modal-header">
+                    <h2><i class="fa fa-search"></i> 保障卡综合数据检查</h2>
+                    <button class="close-modal-btn" onclick="closeComprehensiveCheck()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="diff-upload-section diff-upload-vertical">
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-file-text-o"></i> 保障卡数据<span class="required-mark">*</span></h3>
+                            <div class="upload-area small" id="compFile1UploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择</div>
+                                <input type="file" id="compFile1Input" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="compFile1Display" class="file-display"></div>
+                        </div>
+
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-users"></i> 人资数据<span class="required-mark">*</span></h3>
+                            <div class="upload-area small" id="compFile2UploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择</div>
+                                <input type="file" id="compFile2Input" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="compFile2Display" class="file-display"></div>
+                        </div>
+
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-money"></i> 财务数据<span class="required-mark">*</span></h3>
+                            <div class="upload-area small" id="compFile3UploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择</div>
+                                <input type="file" id="compFile3Input" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="compFile3Display" class="file-display"></div>
+                        </div>
+
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-shopping-bag"></i> 被装数据<span class="required-mark">*</span></h3>
+                            <div class="upload-area small" id="compFile4UploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择</div>
+                                <input type="file" id="compFile4Input" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="compFile4Display" class="file-display"></div>
+                        </div>
+                    </div>
+
+                    <div class="diff-settings">
+                        <button class="download-template-btn" onclick="downloadCompTemplate()">
+                            <i class="fa fa-download"></i> 下载Excel样表
+                        </button>
+                        <span style="margin-left: 10px; color: #666; font-size: 13px;">（样表包含：姓名、公民身份号码、人员类别、军衔文职级、岗位职务层级、待遇级别）</span>
+                    </div>
+
+                    <div class="diff-actions">
+                        <button id="compCheckBtn" class="compare-btn" onclick="checkComprehensiveData()" disabled>
+                            <i class="fa fa-search"></i> 开始检查
+                        </button>
+                    </div>
+
+                    <div id="compResultContainer" class="diff-result-container" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="familyCheckModal" class="modal" style="display: none;">
+            <div class="modal-content audit-modal">
+                <div class="modal-header">
+                    <h2><i class="fa fa-users"></i> 军人已注销家属状况正常</h2>
+                    <button class="close-modal-btn" onclick="closeFamilyCheck()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="diff-upload-section diff-upload-vertical">
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-file-text-o"></i> 本单位人员<span class="required-mark">*</span></h3>
+                            <div class="upload-area small" id="famFile1UploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择</div>
+                                <input type="file" id="famFile1Input" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="famFile1Display" class="file-display"></div>
+                        </div>
+
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-users"></i> 临时供应人员<span class="required-mark">*</span></h3>
+                            <div class="upload-area small" id="famFile2UploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择</div>
+                                <input type="file" id="famFile2Input" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="famFile2Display" class="file-display"></div>
+                        </div>
+
+                        <div class="diff-file-group">
+                            <h3><i class="fa fa-users"></i> 家属<span class="required-mark">*</span></h3>
+                            <div class="upload-area small" id="famFile3UploadArea">
+                                <div class="upload-icon small"><i class="fa fa-file-excel-o"></i></div>
+                                <div class="upload-text small">拖拽文件到此处或点击选择</div>
+                                <input type="file" id="famFile3Input" class="file-input" accept=".xlsx,.xls">
+                            </div>
+                            <div id="famFile3Display" class="file-display"></div>
+                        </div>
+                    </div>
+
+                    <div class="diff-settings">
+                        <div style="padding: 12px; background: #fff3cd; border-radius: 6px; font-size: 13px; color: #856404; line-height: 1.6;">
+                            <strong><i class="fa fa-info-circle"></i> 说明：</strong>本工具将筛选并比对以下情况的家属记录：<br>
+                            <i class="fa fa-angle-right"></i> 对应军人既不在本单位人员也不在临时供应人员中<br>
+                            <i class="fa fa-angle-right"></i> 家属与对应军人的行政单位名称不一致<br>
+                            <i class="fa fa-angle-right"></i> 家属与对应军人的基层医疗机构不一致<br>
+                            <i class="fa fa-angle-right"></i> 家属与对应军人的医疗保障单位不一致
+                        </div>
+                    </div>
+
+                    <div class="diff-actions">
+                        <button id="famCheckBtn" class="compare-btn" onclick="checkFamilyData()" disabled>
+                            <i class="fa fa-search"></i> 开始核查
+                        </button>
+                    </div>
+
+                    <div id="famResultContainer" class="diff-result-container" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="usageHelpModal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h2>花名册使用方法</h2>
+                    <button class="close-modal-btn" onclick="closeUsageHelp()">×</button>
+                </div>
+                <div class="modal-body" style="padding: 30px;">
+                    <div style="font-size: 16px; line-height: 2; color: #333;">
+                        <p style="margin-bottom: 15px;">请按以下步骤操作：</p>
+                        <ol style="padding-left: 25px; margin: 0;">
+                            <li>人员基本信息查询</li>
+                            <li>自定义输出</li>
+                            <li>全选</li>
+                            <li>按Excel格式输出</li>
+                            <li style="color: #e74c3c; font-weight: bold; font-size: 18px; margin-top: 10px;">
+                                <span style="background: #ffe6e6; padding: 5px 10px; border-radius: 4px; display: inline-block;">
+                                    <i class="fa fa-exclamation-triangle"></i> 打开Excel并保存
+                                </span>
+                            </li>
+                        </ol>
+                        <div style="margin-top: 25px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; font-size: 14px; color: #856404;">
+                            <strong>重要提示：</strong>第5步"打开Excel并保存"非常重要，直接影响后续数据处理！
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="changelogModal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 800px;">
+                <div class="modal-header">
+                    <h2><i class="fa fa-file-text-o"></i> 更新日志</h2>
+                    <button class="close-modal-btn" onclick="closeChangelog()">×</button>
+                </div>
+                <div class="modal-body" style="padding: 25px 35px; max-height: 75vh; overflow-y: auto;" id="changelogContent">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 浏览器兼容性补丁（必须最先加载，支持老版本浏览器如 Firefox 45.0.2）-->
+    <script src="脚本/浏览器兼容.js"></script>
+
+    <!-- 背景管理脚本 -->
+    <script src="脚本/背景管理.js"></script>
+    
+    <script src="脚本/更新日志.js"></script>
+    
+    <!-- 工具模块（按依赖顺序加载）-->
+    <script src="脚本/日志管理.js"></script>
+    <script src="脚本/Excel处理.js"></script>
+    <script src="脚本/加载管理.js"></script>
+    <script src="脚本/通知管理.js"></script>
+    
+    <!-- 核心验证模块（按依赖顺序加载）-->
+    <script src="规则/常量.js"></script>
+    <script src="规则/工具函数.js"></script>
+    <script src="规则/错误消息.js"></script>
+    <script src="规则/字段映射.js"></script>
+    <script src="规则/数据验证器.js"></script>
+    <script src="规则/错误格式化.js"></script>
+    <script src="规则/验证规则.js"></script>
+    
+    <!-- 规则检查模块 -->
+    <script src="规则/爱人信息完整性检查.js"></script>
+    <script src="规则/被装发放单位.js"></script>
+    <script src="规则/毕业日期合理性检查.js"></script>
+    <script src="规则/毕业院校检查.js"></script>
+    <script src="规则/毕业专业检查.js"></script>
+    <script src="规则/财务待遇类别一致性检查.js"></script>
+    <script src="规则/出生地检查.js"></script>
+    <script src="规则/单位驻地检查.js"></script>
+    <script src="规则/单位驻地行政区划代码检查.js"></script>
+    <script src="规则/独生子女信息检查.js"></script>
+    <script src="规则/工薪发放单位.js"></script>
+    <script src="规则/婚姻状况检查.js"></script>
+    <script src="规则/基层医疗机构一致性检查.js"></script>
+    <script src="规则/对应营房单位名称检查.js"></script>
+    <script src="规则/对应财务单位名称检查.js"></script>
+    <script src="规则/对应被装单位名称检查.js"></script>
+    <script src="规则/籍贯检查.js"></script>
+    <script src="规则/联系电话检查.js"></script>
+    <script src="规则/人员类别工具.js"></script>
+    <script src="规则/人员类别检查.js"></script>
+    <script src="规则/行政职务检查.js"></script>
+    <script src="规则/行政职务日期检查.js"></script>
+    <script src="规则/入伍地检查.js"></script>
+    <script src="规则/入学日期合理性检查.js"></script>
+    <script src="规则/身份证日期检查.js"></script>
+    <script src="规则/体型数据检查.js"></script>
+    <script src="规则/体系医院一致性检查.js"></script>
+    <script src="规则/文化程度检查.js"></script>
+    <script src="规则/学位检查.js"></script>
+    <script src="规则/血型检查.js"></script>
+    <script src="规则/医疗保障单位.js"></script>
+    <script src="规则/证件编号检查.js"></script>
+    <script src="规则/证件类型检查.js"></script>
+    <script src="规则/政治面貌检查.js"></script>
+    <script src="规则/超预备党员时间检查.js"></script>
+    <script src="规则/组织关系机构名称检查.js"></script>
+    <script src="规则/固化注册码检查.js"></script>
+    <script src="规则/服装登记表号检查.js"></script>
+    <script src="规则/现居住地址检查.js"></script>
+    <script src="规则/工作时间检查.js"></script>
+    <script src="规则/工作日期检查.js"></script>
+    <script src="规则/士兵注册码检查.js"></script>
+    <script src="规则/选改士官日期检查.js"></script>
+    <script src="脚本/主脚本.js"></script>
+    <script src="脚本/数据生成工具.js"></script>
+    <script src="生成器/血型生成.js"></script>
+    <script src="生成器/联系电话生成.js"></script>
+    <script src="生成器/身份证日期生成.js"></script>
+    <script src="生成器/文化程度生成.js"></script>
+    <script src="生成器/学位生成.js"></script>
+    <script src="生成器/毕业院校生成.js"></script>
+    <script src="生成器/毕业专业生成.js"></script>
+    <script src="生成器/入学日期生成.js"></script>
+    <script src="生成器/毕业日期生成.js"></script>
+    <script src="生成器/体型数据生成.js"></script>
+    <script src="生成器/证件类型生成.js"></script>
+    <script src="生成器/证件编号生成.js"></script>
+    <script src="生成器/组织关系机构名称生成.js"></script>
+    <script src="生成器/是否独生子女生成.js"></script>
+    <script src="生成器/工作时间生成.js"></script>
+    <script src="生成器/政治面貌修正.js"></script>
+    <script src="联审工具/字段标准化.js"></script>
+    <script src="联审工具/保障卡综合检查.js"></script>
+    <script src="联审工具/家属核查.js"></script>
+    <script src="脚本/数据整合工具.js"></script>
+    <script src="脚本/数据联审工具.js"></script>
+    <script src="脚本/通知单处理.js"></script>
+    <script src="脚本/发卡工具.js"></script>
+    <script src="脚本/发卡收卡登记.js"></script>
+    
+    <!-- 常用部门数据列表 -->
+    <datalist id="commonDepartmentsList"></datalist>
+</body>
+</html>

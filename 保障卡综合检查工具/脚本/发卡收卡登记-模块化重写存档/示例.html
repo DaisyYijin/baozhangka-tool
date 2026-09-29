@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>发卡收卡登记系统 - 模块化演示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .section-title {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .demo-card {
+            background: #f8f9fa;
+            padding: 24px;
+            border-radius: 12px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s;
+        }
+        
+        .demo-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+            transform: translateY(-2px);
+        }
+        
+        .demo-card h3 {
+            color: #667eea;
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+        
+        .demo-card p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .console-output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        
+        .console-output .success {
+            color: #4ec9b0;
+        }
+        
+        .console-output .error {
+            color: #f48771;
+        }
+        
+        .console-output .info {
+            color: #569cd6;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-card .number {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            padding: 12px 0;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+        }
+        
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .feature-list li::before {
+            content: '✓';
+            color: #4ec9b0;
+            font-weight: bold;
+            margin-right: 12px;
+            font-size: 18px;
+        }
+        
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 发卡收卡登记系统</h1>
+            <p>模块化重构演示 | v3.0.0 Modular</p>
+        </div>
+        
+        <div class="content">
+            <!-- 系统状态 -->
+            <div class="section">
+                <h2 class="section-title">📊 系统状态</h2>
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="number" id="moduleCount">10</div>
+                        <div class="label">模块数量</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number" id="recordCount">0</div>
+                        <div class="label">记录总数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number" id="issueCount">0</div>
+                        <div class="label">发卡记录</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="number" id="recycleCount">0</div>
+                        <div class="label">收卡记录</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 功能演示 -->
+            <div class="section">
+                <h2 class="section-title">🚀 功能演示</h2>
+                <div class="demo-grid">
+                    <div class="demo-card">
+                        <h3>1. 初始化系统</h3>
+                        <p>加载配置和数据，初始化所有模块</p>
+                        <button class="btn" onclick="demoInit()">运行演示</button>
+                    </div>
+                    
+                    <div class="demo-card">
+                        <h3>2. 创建发卡记录</h3>
+                        <p>使用工厂方法创建标准发卡记录</p>
+                        <button class="btn" onclick="demoCreateIssue()">运行演示</button>
+                    </div>
+                    
+                    <div class="demo-card">
+                        <h3>3. 创建收卡记录</h3>
+                        <p>创建收卡记录并添加到系统</p>
+                        <button class="btn" onclick="demoCreateRecycle()">运行演示</button>
+                    </div>
+                    
+                    <div class="demo-card">
+                        <h3>4. 搜索功能</h3>
+                        <p>按姓名、身份证、卡号搜索记录</p>
+                        <button class="btn" onclick="demoSearch()">运行演示</button>
+                    </div>
+                    
+                    <div class="demo-card">
+                        <h3>5. 过滤功能</h3>
+                        <p>按卡类型、状态、年份过滤</p>
+                        <button class="btn" onclick="demoFilter()">运行演示</button>
+                    </div>
+                    
+                    <div class="demo-card">
+                        <h3>6. 分页功能</h3>
+                        <p>大数据集分页显示</p>
+                        <button class="btn" onclick="demoPagination()">运行演示</button>
+                    </div>
+                    
+                    <div class="demo-card">
+                        <h3>7. 批量操作</h3>
+                        <p>批量创建、更新、删除记录</p>
+                        <button class="btn" onclick="demoBatch()">运行演示</button>
+                    </div>
+                    
+                    <div class="demo-card">
+                        <h3>8. 运行全部测试</h3>
+                        <p>执行内置测试套件</p>
+                        <button class="btn" onclick="demoTestAll()">运行测试</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 核心特性 -->
+            <div class="section">
+                <h2 class="section-title">✨ 核心特性</h2>
+                <ul class="feature-list">
+                    <li>完整的模块化架构（10个独立模块）</li>
+                    <li>UI渲染、事件处理、导入导出完整支持</li>
+                    <li>智能搜索（支持拼音首字母）</li>
+                    <li>多维度过滤（卡类型、状态、时间）</li>
+                    <li>高性能分页（支持大数据集）</li>
+                    <li>Excel导入导出（支持模板下载）</li>
+                    <li>数据备份与恢复（JSON格式）</li>
+                    <li>重复检测和数据验证</li>
+                    <li>本地存储持久化</li>
+                    <li>向后兼容原系统</li>
+                </ul>
+            </div>
+            
+            <!-- 控制台输出 -->
+            <div class="section">
+                <h2 class="section-title">💻 控制台输出</h2>
+                <div class="console-output" id="console">
+                    <div class="info">等待演示运行...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import CardRegistry from './入口.js';
+        
+        // 暴露到全局供按钮调用
+        window.CardRegistry = CardRegistry;
+        
+        // 初始化
+        CardRegistry.init();
+        updateStats();
+        
+        // 日志函数
+        function log(message, type = 'info') {
+            const console = document.getElementById('console');
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+            const time = new Date().toLocaleTimeString();
+            console.innerHTML += `<div class="${className}">[${time}] ${message}</div>`;
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        function clearConsole() {
+            document.getElementById('console').innerHTML = '';
+        }
+        
+        function updateStats() {
+            const state = CardRegistry.getState();
+            document.getElementById('recordCount').textContent = state.records.length;
+            document.getElementById('issueCount').textContent = 
+                state.records.filter(r => r.action === 'issue').length;
+            document.getElementById('recycleCount').textContent = 
+                state.records.filter(r => r.action === 'recycle').length;
+        }
+        
+        // 演示函数
+        window.demoInit = function() {
+            clearConsole();
+            log('🚀 开始初始化系统...', 'info');
+            
+            const success = CardRegistry.init();
+            if (success) {
+                log('✅ 系统初始化成功', 'success');
+                log('📦 加载配置: ' + JSON.stringify(CardRegistry.getState().config.cardTypes), 'info');
+                log('📊 当前记录数: ' + CardRegistry.getRecordCount(), 'info');
+            } else {
+                log('❌ 系统初始化失败', 'error');
+            }
+            
+            updateStats();
+        };
+        
+        window.demoCreateIssue = function() {
+            clearConsole();
+            log('🎯 创建发卡记录演示...', 'info');
+            
+            const record = CardRegistry.createIssueRecord({
+                name: '张三',
+                idNumber: '110101199001011234',
+                department: '第一连',
+                cardType: 'Ⅰ类卡',
+                cardNumber: 'BZK' + Date.now(),
+                issueDate: '2024-01-01'
+            });
+            
+            log('📝 创建记录: ' + JSON.stringify(record, null, 2), 'info');
+            
+            CardRegistry.addRecord(record);
+            log('✅ 记录添加成功！ID: ' + record.id, 'success');
+            log('📊 当前总记录数: ' + CardRegistry.getRecordCount(), 'info');
+            
+            updateStats();
+        };
+        
+        window.demoCreateRecycle = function() {
+            clearConsole();
+            log('🎯 创建收卡记录演示...', 'info');
+            
+            const record = CardRegistry.createRecycleRecord({
+                name: '李四',
+                idNumber: '110101199002022345',
+                department: '第二连',
+                cardType: 'Ⅱ类卡',
+                cardNumber: 'BZK' + Date.now(),
+                reason: '退伍回收',
+                recycleDate: '2024-10-01'
+            });
+            
+            log('📝 创建收卡记录: ' + record.name, 'info');
+            
+            CardRegistry.addRecord(record);
+            log('✅ 收卡记录添加成功！', 'success');
+            
+            updateStats();
+        };
+        
+        window.demoSearch = function() {
+            clearConsole();
+            log('🔍 搜索功能演示...', 'info');
+            
+            // 先创建一些测试数据
+            const testData = [
+                { name: '张三', idNumber: '110101199001011234', department: '第一连', cardType: 'Ⅰ类卡' },
+                { name: '李四', idNumber: '110101199002022345', department: '第二连', cardType: 'Ⅱ类卡' },
+                { name: '王五', idNumber: '110101199003033456', department: '第三连', cardType: 'Ⅲ类卡' }
+            ];
+            
+            testData.forEach(data => {
+                const record = CardRegistry.createIssueRecord({
+                    ...data,
+                    cardNumber: 'BZK' + Date.now() + Math.random().toString(36).substr(2, 5)
+                });
+                CardRegistry.addRecord(record);
+            });
+            
+            log('✅ 创建了 ' + testData.length + ' 条测试数据', 'success');
+            
+            // 搜索演示
+            CardRegistry.searchRecords('张三');
+            const results = CardRegistry.getFilteredRecords();
+            log('🔍 搜索 "张三" 找到 ' + results.length + ' 条记录', 'info');
+            
+            // 拼音搜索
+            CardRegistry.searchRecords('zs');
+            const pinyinResults = CardRegistry.getFilteredRecords();
+            log('🔍 拼音搜索 "zs" 找到 ' + pinyinResults.length + ' 条记录', 'info');
+            
+            updateStats();
+        };
+        
+        window.demoFilter = function() {
+            clearConsole();
+            log('🎨 过滤功能演示...', 'info');
+            
+            // 按卡类型过滤
+            CardRegistry.filterByCardType('Ⅰ类卡');
+            let results = CardRegistry.getFilteredRecords();
+            log('📋 Ⅰ类卡记录: ' + results.filter(r => r.action === 'issue').length + ' 条', 'info');
+            
+            // 按年份过滤
+            CardRegistry.filterByYear('2024');
+            results = CardRegistry.getFilteredRecords();
+            log('📅 2024年记录: ' + results.length + ' 条', 'info');
+            
+            // 重置过滤
+            CardRegistry.resetFilters();
+            log('🔄 过滤已重置', 'success');
+        };
+        
+        window.demoPagination = function() {
+            clearConsole();
+            log('📄 分页功能演示...', 'info');
+            
+            // 创建大量测试数据
+            log('⏳ 创建100条测试数据...', 'info');
+            for (let i = 0; i < 100; i++) {
+                const record = CardRegistry.createIssueRecord({
+                    name: '测试' + (i + 1),
+                    idNumber: '110101199001010000' + String(i).padStart(3, '0'),
+                    department: '测试部门',
+                    cardType: 'Ⅰ类卡',
+                    cardNumber: 'TEST' + Date.now() + i
+                });
+                CardRegistry.addRecord(record);
+            }
+            log('✅ 测试数据创建完成', 'success');
+            
+            // 设置分页
+            CardRegistry.changePageSize(10);
+            CardRegistry.updatePagination(100);
+            
+            const pageInfo = CardRegistry.getPaginationInfo();
+            log('📊 总页数: ' + pageInfo.totalPages, 'info');
+            log('📄 当前页: ' + pageInfo.currentPage, 'info');
+            log('📝 每页显示: ' + pageInfo.pageSize + ' 条', 'info');
+            
+            // 翻页
+            CardRegistry.nextPage();
+            log('➡️ 已翻到第 ' + CardRegistry.getPaginationInfo().currentPage + ' 页', 'info');
+            
+            updateStats();
+        };
+        
+        window.demoBatch = function() {
+            clearConsole();
+            log('📦 批量操作演示...', 'info');
+            
+            // 批量创建
+            const records = [];
+            for (let i = 0; i < 5; i++) {
+                records.push(CardRegistry.createIssueRecord({
+                    name: '批量' + (i + 1),
+                    idNumber: '110101199005050000' + i,
+                    department: '批量测试',
+                    cardType: 'Ⅰ类卡',
+                    cardNumber: 'BATCH' + i
+                }));
+            }
+            
+            records.forEach(r => CardRegistry.addRecord(r));
+            log('✅ 批量创建了 ' + records.length + ' 条记录', 'success');
+            
+            // 批量更新
+            const ids = records.map(r => r.id);
+            CardRegistry.batchUpdate(ids, { department: '批量测试（已更新）' });
+            log('✅ 批量更新了 ' + ids.length + ' 条记录', 'success');
+            
+            // 验证
+            const updated = CardRegistry.findRecordsByNameAndDepartment('批量1', '批量测试（已更新）');
+            log('🔍 验证: ' + (updated.length > 0 ? '更新成功' : '更新失败'), 
+                updated.length > 0 ? 'success' : 'error');
+            
+            updateStats();
+        };
+        
+        window.demoTestAll = function() {
+            clearConsole();
+            log('🧪 运行完整测试套件...', 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            
+            const success = CardRegistry.test();
+            
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            log(success ? '✅ 所有测试通过！' : '❌ 测试失败！', 
+                success ? 'success' : 'error');
+        };
+        
+        // 初始日志
+        log('🎉 模块化系统已加载', 'success');
+        log('📚 点击上方按钮运行演示', 'info');
+    </script>
+</body>
+</html>
+

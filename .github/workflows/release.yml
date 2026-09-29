@@ -109,9 +109,25 @@ jobs:
           name: baozhangka-tool-linux-armhf
           path: baozhangka-tool-linux-armhf.tar.gz
 
+  # ---------- 网页版综合检查工具(独立 zip) ----------
+  checker-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package
+        run: |
+          cd web
+          zip -r -q ../baozhangka-checker-web.zip 保障卡综合检查工具
+          cd ..
+          unzip -l baozhangka-checker-web.zip | tail -3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baozhangka-checker-web
+          path: baozhangka-checker-web.zip
+
   # ---------- 汇总创建 Release ----------
   release:
-    needs: [windows-x86, linux-x86_64, linux-arm64, linux-armhf]
+    needs: [windows-x86, linux-x86_64, linux-arm64, linux-armhf, checker-web]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
