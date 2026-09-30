@@ -1545,6 +1545,9 @@ static void switch_page(int page)
     ShowWindow(g_hList, taskCtrls ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hStatus, taskCtrls ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hBtn[14], taskCtrls ? SW_SHOW : SW_HIDE);   /* 运行按钮 */
+    for (int i = 0; i < g_tabCount; i++)                     /* TAB 行仅任务页显示 */
+        if (g_hTabs[i]) ShowWindow(g_hTabs[i], taskCtrls ? SW_SHOW : SW_HIDE);
+    if (g_hTabAdd) ShowWindow(g_hTabAdd, taskCtrls ? SW_SHOW : SW_HIDE);
 
     ShowWindow(g_hLog, page == 1 ? SW_SHOW : SW_HIDE);
     ShowWindow(GetDlgItem(g_hMain, IDC_BTN_LOGCLEAR), page == 1 ? SW_SHOW : SW_HIDE);
@@ -1918,7 +1921,8 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 { L"使用说明", IDC_BTN_HELP },
             };
             int ny = 14 + (NAV_BTN_H + 6) * 3 + 12;   /* 分隔区之后 */
-            for (int i = 0; i < 8; i++) {
+            int navN = (int)(sizeof(nav) / sizeof(nav[0]));
+            for (int i = 0; i < navN; i++) {
                 g_hBtn[6 + i] = mk(L"BUTTON", nav[i].txt, BS_OWNERDRAW,
                                    (NAV_W - NAV_BTN_W) / 2, ny, NAV_BTN_W, NAV_BTN_H, nav[i].id);
                 ny += NAV_BTN_H + 6;
