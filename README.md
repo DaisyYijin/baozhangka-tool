@@ -39,35 +39,79 @@ Windows 版与 Linux 版共享同一套核心引擎(纯 C 编写,见 `src/core`)
 - **全局热键**:**F6 开始 / Ctrl+F12 停止**(任何界面下生效)
 - **综合检查**:侧栏「综合检查」打开网页版四表联审工具(需从 Release 下载 checker-web.zip 解压到程序目录)
 
-## 快速开始
+## 各系统使用方式
 
-### Windows
+### 🪟 Windows 7 / 8 / 10 / 11(最简单)
 
-1. 双击 `dist\BaoZhangKaTool.exe` 即可运行,无需安装任何东西。
-2. 自己编译:
+1. 下载 **`baozhangka-tool-windows-xp-x86.zip`**,解压得到 `BaoZhangKaTool.exe`(单个文件,约 440KB);
+2. 双击运行即可 —— **无需安装、无需管理员权限、无运行库依赖**(32 位静态编译,64 位系统原生兼容)。
+
+建议:把 exe 放在一个固定文件夹(如 `D:\保障卡工具\`),因为同目录会保存:
+
+- `last_task.csv` —— 上次任务(自动保存 / 启动恢复)
+- `保障卡综合检查工具\` —— 综合检查网页工具(见下)
+
+全局热键:**F6 开始 / Ctrl+F12 停止**(任何界面下有效)。
+
+### 🪟 Windows XP / Vista
+
+- 同上,下载 `windows-xp-x86` 版直接双击 —— 本项目自诞生起保持 XP SP3 兼容
+  (32 位、静态链接、仅使用 XP 自带系统库),**XP 不需要单独的版本**。
+
+### 🐧 Linux(x86_64 / ARM64 / 树莓派)
+
+1. 下载对应架构的压缩包(看不清架构就终端执行 `uname -m`):
+   - `x86_64` → 普通 PC / Intel / AMD
+   - `aarch64` → 树莓派 4/5(64 位系统)、ARM 小主机
+   - `armhf` → 树莓派 3 等 32 位系统
+2. 解压并赋可执行权限,即可运行:
+
+```sh
+tar xzf baozhangka-tool-linux-arm64.tar.gz   # 换成你的架构
+chmod +x baozhangka-tool
+./baozhangka-tool
+```
+
+3. 若提示缺少 GTK3(部分精简系统),安装依赖即可:
+
+```sh
+# Debian / Ubuntu / 树莓派
+sudo apt install libgtk-3-0 libxtst6
+# Fedora
+sudo dnf install gtk3 libXtst
+# Arch
+sudo pacman -S gtk3 libxtst
+```
+
+> **Wayland 用户**:输入模拟依赖 X11(XTest)。请在登录界面选"Ubuntu on X11"之类会话运行。
+
+### 🍎 macOS
+
+暂无原生版本。Mac 用户可在虚拟机 / Parallels 中运行 Windows 版。
+
+### 📄 综合检查工具(四表联审,所有系统通用)
+
+1. 下载 **`baozhangka-checker-web.zip`**;
+2. **放到主程序 exe 旁边**(不要解压)→ 打开主程序,点侧栏「综合检查」—— 程序会**自动解压**并用浏览器打开;
+   - Linux 用户:解压 zip,双击 `保障卡综合检查工具/主程序.html`;
+3. 或完全不用主程序,直接双击 `主程序.html` 在浏览器中使用(对比保障卡/人资/财务/被装四表数据)。
+
+### 🔧 从源码构建(开发者)
+
+**Windows**(需要 [MSYS2](https://www.msys2.org/) 的 MinGW-w64 i686 工具链:
+`pacman -S mingw-w64-i686-gcc`,默认装在 `C:\msys64`):
 
 ```bat
 build\windows_build.bat
 ```
 
-(需要 [MSYS2](https://www.msys2.org/) 的 MinGW-w64 i686 工具链:
-`pacman -S mingw-w64-i686-gcc`,脚本默认使用 `C:\msys64`)
-
-### Linux
+**Linux**(自动识别架构,依赖 GCC + GTK3 开发库):
 
 ```sh
-# 安装依赖(Debian/Ubuntu/树莓派示例)
-sudo apt install gcc pkg-config libgtk-3-dev libxtst-dev
-
-# 编译(自动识别架构:x86_64 / aarch64 / armhf 均可)
+sudo apt install gcc pkg-config libgtk-3-dev libxtst-dev   # Debian/Ubuntu/树莓派
 sh build/linux_build.sh
-
-# 运行
 ./dist/baozhangka-tool
 ```
-
-> 提示:Linux 下输入合成依赖 X11 桌面(XTest 扩展)。Wayland 用户请在登录界面选择
-> "XX on X11" 会话运行。
 
 ## 使用说明
 
