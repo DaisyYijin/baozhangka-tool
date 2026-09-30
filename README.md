@@ -12,7 +12,7 @@
 | `baozhangka-tool-linux-x86_64.tar.gz` | Linux(桌面发行版) | x86_64 / AMD64 | 依赖系统 GTK3 + X11 |
 | `baozhangka-tool-linux-arm64.tar.gz` | Linux | **ARM64 / aarch64**(树莓派 4/5、ARM 小主机、国产 ARM 平台) | 原生编译 |
 | `baozhangka-tool-linux-armhf.tar.gz` | Linux | ARM32 / armhf(树莓派 3 等 32 位系统) | 原生编译 |
-| `baozhangka-checker-web.zip` | 任意(浏览器) | — | **网页版综合检查工具**(数据校验/联审/字段生成等),解压到主程序目录后,侧栏「综合检查」按钮一键打开;也可独立双击 `主程序.html` 使用 |
+| `baozhangka-checker-web.zip` | 任意(浏览器) | — | **网页版综合检查工具**(数据校验/联审/字段生成等),放到主程序目录(或解压)后,侧栏「综合检查」按钮一键打开——检测到 zip 会**自动解压**;也可独立双击 `主程序.html` 使用 |
 
 > **Windows on ARM(Surface Pro X /骁龙本)**:直接使用 `windows-xp-x86` 版,
 > Win11 ARM 的内置 x86 模拟即可运行,无需单独的 ARM64 版本。

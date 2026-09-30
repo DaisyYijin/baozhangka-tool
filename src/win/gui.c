@@ -1336,6 +1336,74 @@ enum {
     CTX_EDIT, CTX_DEL, CTX_UP, CTX_DOWN, CTX_DUP
 };
 
+/* zip 解压到目录(枚举条目逐个写出;zip_list 回调无用户参,用静态上下文) */
+static const unsigned char *g_czData;
+static size_t g_czSize;
+static const wchar_t *g_czRoot;
+static int g_czFiles;
+
+static int cz_cb(const char *name, void *ud)
+{
+    (void)ud;
+    if (!name || !name[0]) return 0;
+    wchar_t wrel[512];
+    if (u8_to_wcs(name, wrel, 511) == 0) return 0;
+    for (wchar_t *q = wrel; *q; q++)
+        if (*q == L'/') *q = L'\\';
+    wchar_t full[MAX_PATH + 512];
+    _snwprintf(full, MAX_PATH + 511, L"%ls\\%ls", g_czRoot, wrel);
+    full[MAX_PATH + 511] = 0;
+    size_t L = wcslen(full);
+    if (L && full[L - 1] == L'\\') {              /* 目录条目 */
+        full[L - 1] = 0;
+        SHCreateDirectoryExW(NULL, full, NULL);
+        return 0;
+    }
+    wchar_t *sl = wcsrchr(full, L'\\');
+    if (sl) {
+        *sl = 0;
+        SHCreateDirectoryExW(NULL, full, NULL);
+        *sl = L'\\';
+    }
+    size_t outLen = 0;
+    uint8_t *d = zip_read(g_czData, g_czSize, name, 0, NULL, 0, &outLen);
+    if (!d) return 0;
+    FILE *f = _wfopen(full, L"wb");
+    if (f) {
+        fwrite(d, 1, outLen, f);
+        fclose(f);
+        g_czFiles++;
+    }
+    free(d);
+    return 0;
+}
+
+/* exe 旁有 checker zip 时自动解压;返回解压文件数 */
+static int checker_try_extract(const wchar_t *dir)
+{
+    static const wchar_t *zips[] = { L"baozhangka-checker-web.zip",
+                                     L"保障卡综合检查工具.zip" };
+    wchar_t zp[MAX_PATH + 32];
+    for (int i = 0; i < 2; i++) {
+        _snwprintf(zp, MAX_PATH + 31, L"%ls%ls", dir, zips[i]);
+        zp[MAX_PATH + 31] = 0;
+        size_t len = 0;
+        unsigned char *data = read_file_all(zp, &len);
+        if (!data) continue;
+        g_czData = data;
+        g_czSize = len;
+        g_czRoot = dir;
+        g_czFiles = 0;
+        zip_list(data, len, cz_cb, NULL);
+        free(data);
+        if (g_czFiles > 0) {
+            log_add(L"综合检查工具:已从 %ls 解压 %d 个文件", zips[i], g_czFiles);
+            return g_czFiles;
+        }
+    }
+    return 0;
+}
+
 /* 打开网页版「保障卡综合检查工具」:
    优先 exe 旁的 保障卡综合检查工具\主程序.html(从 Release 下载
    baozhangka-checker-web.zip 解压);未找到时提示 */
@@ -1347,6 +1415,8 @@ static void open_checker_tool(void)
     if (p) *(p + 1) = 0;
     _snwprintf(html, MAX_PATH + 63, L"%ls保障卡综合检查工具\\主程序.html", dir);
     html[MAX_PATH + 63] = 0;
+    if (GetFileAttributesW(html) == INVALID_FILE_ATTRIBUTES)
+        checker_try_extract(dir);          /* exe 旁有 zip 则自动解压 */
     if (GetFileAttributesW(html) != INVALID_FILE_ATTRIBUTES) {
         ShellExecuteW(NULL, L"open", html, NULL, NULL, SW_SHOWNORMAL);
         log_add(L"已打开综合检查工具(浏览器)");
