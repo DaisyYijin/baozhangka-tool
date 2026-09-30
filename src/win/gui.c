@@ -1752,8 +1752,9 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 { L"↓ 下移",   IDC_BTN_DOWN },
                 { L"导入导出", IDC_BTN_IMPORT },
                 { L"使用说明", IDC_BTN_HELP },
+                { L"综合检查", IDC_BTN_CHECKER },   /* 打开网页版四表联审 */
             };
-            int ny = 14 + (NAV_BTN_H + 6) * 3 + 12;   /* 分隔区之后 */
+            int ny = 14 + (NAV_BTN_H + 6) * 2 + 12;   /* 分隔区之后(任务/日志两页签) */
             int navN = (int)(sizeof(nav) / sizeof(nav[0]));
             for (int i = 0; i < navN; i++) {
                 g_hBtn[6 + i] = mk(L"BUTTON", nav[i].txt, BS_OWNERDRAW,
