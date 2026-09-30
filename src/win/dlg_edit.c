@@ -794,6 +794,14 @@ static LRESULT CALLBACK tp_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         HDC dc = BeginPaint(hwnd, &ps);
         RECT rc;
         GetClientRect(hwnd, &rc);
+        /* 排除子窗口(取消按钮)区域:父窗口重绘不覆盖按钮,
+           否则按钮被反复擦画导致闪烁 */
+        if (g_tp.btnCancel) {
+            RECT rcb;
+            GetWindowRect(g_tp.btnCancel, &rcb);
+            MapWindowPoints(NULL, hwnd, (POINT *)&rcb, 2);
+            ExcludeClipRect(dc, rcb.left, rcb.top, rcb.right, rcb.bottom);
+        }
         /* 双缓冲:先画到内存位图,一次性上屏 */
         HDC mem = CreateCompatibleDC(dc);
         HBITMAP bmp = CreateCompatibleBitmap(dc, rc.right, rc.bottom);
