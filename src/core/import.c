@@ -9,6 +9,9 @@
 #include <ctype.h>
 #include <stdio.h>
 
+/* 定时设置导入暂存(#设置 12/14/16 列;-1=未含) */
+int g_imp_sched_en = -1, g_imp_sched_hh = -1, g_imp_sched_mm = -1;
+
 #ifdef _WIN32
 #define AC_SWPRINTF(b, n, ...) do { _snwprintf(b, n, __VA_ARGS__); (b)[(n) - 1] = 0; } while (0)
 #else
@@ -137,7 +140,28 @@ int task_import_sheet(Task *t, const Sheet *s, int append)
 
     startRow = (dataRow >= 0) ? dataRow : s->rows;
 
-    /* 提取数据源段(#数据,N + 后续 N 行第一列) */
+    /* 提取数据源段:#数据列,名1,名2..(表头) + #数据,N + N 行(整行 \t 连接) */
+    for (int r = 0; r < s->rows; r++) {
+        wchar_t *c0 = cell_wcs(s, r, 0);
+        if (c0 && wcscmp(c0, L"#数据列") == 0) {
+            int cn = 0;
+            for (int cc = 1; cc < s->cols; cc++) {
+                if (!cell_wcs(s, r, cc)) break;
+                cn++;
+            }
+            if (cn > 0) {
+                free(t->dataColNames);
+                t->dataColNames = (wchar_t (*)[32])calloc((size_t)cn, 32 * sizeof(wchar_t));
+                t->dataColN = cn;
+                for (int cc = 0; cc < cn; cc++) {
+                    wchar_t *h = cell_wcs(s, r, 1 + cc);
+                    wcsncpy(t->dataColNames[cc], h ? h : L"", 31);
+                    t->dataColNames[cc][31] = 0;
+                }
+            }
+            break;
+        }
+    }
     for (int r = 0; r < s->rows; r++) {
         wchar_t *c0 = cell_wcs(s, r, 0);
         if (c0 && wcscmp(c0, L"#数据") == 0) {
@@ -150,12 +174,22 @@ int task_import_sheet(Task *t, const Sheet *s, int append)
                 t->dataRows = (wchar_t **)calloc((size_t)n, sizeof(wchar_t *));
                 t->dataRowCount = 0;
                 for (int k = 0; k < n && r + 1 + k < s->rows; k++) {
-                    wchar_t *v = cell_wcs(s, r + 1 + k, 0);
-                    if (!v) v = L"";
-                    size_t wl = wcslen(v);
+                    wchar_t line[AC_TEXT_MAX * 2];
+                    int oi = 0;
+                    line[0] = 0;
+                    for (int cc = 0; cc < s->cols; cc++) {
+                        wchar_t *v = cell_wcs(s, r + 1 + k, cc);
+                        if (!v) break;                 /* 行尾 */
+                        if (cc > 0 && oi < AC_TEXT_MAX * 2 - 2)
+                            line[oi++] = L'\t';
+                        for (wchar_t *q = v; *q && oi < AC_TEXT_MAX * 2 - 1; q++)
+                            line[oi++] = *q;
+                        line[oi] = 0;
+                    }
+                    size_t wl = wcslen(line);
                     wchar_t *dup = (wchar_t *)malloc((wl + 1) * sizeof(wchar_t));
                     if (dup) {
-                        wcscpy(dup, v);
+                        wcscpy(dup, line);
                         t->dataRows[t->dataRowCount++] = dup;
                     }
                 }
@@ -174,6 +208,9 @@ int task_import_sheet(Task *t, const Sheet *s, int append)
                 t->jitter          = cell_int(s, r, 6, t->jitter);
                 t->startCountdown  = cell_int(s, r, 8, t->startCountdown);
                 t->loopsFromExcel  = cell_int(s, r, 10, t->loopsFromExcel) ? 1 : 0;
+                g_imp_sched_en = cell_int(s, r, 12, -1);   /* 旧文件无定时列=-1 */
+                g_imp_sched_hh = cell_int(s, r, 14, -1);
+                g_imp_sched_mm = cell_int(s, r, 16, -1);
                 break;
             }
         }
@@ -257,7 +294,7 @@ int task_import_sheet(Task *t, const Sheet *s, int append)
             }
         }
 
-        if (type == ACT_JUMP) {
+        if (type == ACT_JUMP || type == ACT_CALL) {
             int jt = 0, jtab = 0;
             /* 目标写法:5=当前任务第5步;3:5=步骤TAB3的第5步。
                依次从 跳转列 / 次数列 / 文本列 解析 */
@@ -283,6 +320,10 @@ int task_import_sheet(Task *t, const Sheet *s, int append)
             if (jt == 0 && map[COL_COUNT] >= 0) jt = cell_int(s, r, map[COL_COUNT], 0);
             st.jumpTo = jt;
             st.jumpTab = jtab;
+        }
+        if (type == ACT_CHECK) {
+            st.ifColor = cell_int(s, r, map[COL_COUNT] >= 0 ? map[COL_COUNT] : 3, 0);
+            st.ifTol = cell_int(s, r, map[COL_INTERVAL] >= 0 ? map[COL_INTERVAL] : 4, 10);
         }
 
         if (task_add(t, &st) >= 0) imported++;
@@ -335,7 +376,8 @@ static void csv_row_end(char **buf, size_t *len, size_t *cap)
 
 /* ---------------- 单任务导出(保留:测试/简易用途) ---------------- */
 
-char *task_export_csv(const Task *t, size_t *outLen)
+char *task_export_csv2(const Task *t, size_t *outLen,
+                       int sched_en, int sched_hh, int sched_mm)
 {
     if (!t) return NULL;
     size_t cap = 4096, len = 0;
@@ -347,8 +389,9 @@ char *task_export_csv(const Task *t, size_t *outLen)
     {
         char tmp[160];
         snprintf(tmp, sizeof(tmp),
-                 "#设置,循环次数,%d,循环间隔毫秒,%d,随机抖动毫秒,%d,开始倒计时毫秒,%d,按Excel行数,%d\r\n",
-                 t->loops, t->loopGap, t->jitter, t->startCountdown, t->loopsFromExcel ? 1 : 0);
+                 "#设置,循环次数,%d,循环间隔毫秒,%d,随机抖动毫秒,%d,开始倒计时毫秒,%d,按Excel行数,%d,定时启用,%d,定时时,%d,定时分,%d\r\n",
+                 t->loops, t->loopGap, t->jitter, t->startCountdown, t->loopsFromExcel ? 1 : 0,
+                 sched_en, sched_hh, sched_mm);
         append_str(&buf, &len, &cap, tmp, strlen(tmp));
     }
     if (t->name[0]) {   /* 重命名过的TAB:名字随单任务导出 */
@@ -357,13 +400,33 @@ char *task_export_csv(const Task *t, size_t *outLen)
         csv_row_end(&buf, &len, &cap);
     }
 
-    /* 数据源段 */
+    /* 数据源段:列名表 + 每行多列(\t 拆为 CSV 字段) */
     if (t->dataRowCount > 0) {
         char tmp[32];
+        if (t->dataColN > 0) {
+            append_str(&buf, &len, &cap, "#数据列,", strlen("#数据列,"));
+            for (int c = 0; c < t->dataColN; c++) {
+                if (c) append_str(&buf, &len, &cap, ",", 1);
+                append_field(&buf, &len, &cap, t->dataColNames[c]);
+            }
+            csv_row_end(&buf, &len, &cap);
+        }
         snprintf(tmp, sizeof(tmp), "#数据,%d\r\n", t->dataRowCount);
         append_str(&buf, &len, &cap, tmp, strlen(tmp));
         for (int i = 0; i < t->dataRowCount; i++) {
-            append_field(&buf, &len, &cap, t->dataRows[i]);
+            wchar_t cellv[AC_TEXT_MAX];
+            const wchar_t *b = t->dataRows[i];
+            for (;;) {
+                const wchar_t *e = wcschr(b, L'\t');
+                size_t n = e ? (size_t)(e - b) : wcslen(b);
+                if (n >= AC_TEXT_MAX) n = AC_TEXT_MAX - 1;
+                wcsncpy(cellv, b, n);
+                cellv[n] = 0;
+                append_field(&buf, &len, &cap, cellv);
+                if (!e) break;
+                append_str(&buf, &len, &cap, ",", 1);
+                b = e + 1;
+            }
             csv_row_end(&buf, &len, &cap);
         }
     }
@@ -388,15 +451,17 @@ char *task_export_csv(const Task *t, size_t *outLen)
         append_str(&buf, &len, &cap, ",", 1);
         append_int(&buf, &len, &cap, s->x);  append_str(&buf, &len, &cap, ",", 1);
         append_int(&buf, &len, &cap, s->y);  append_str(&buf, &len, &cap, ",", 1);
-        append_int(&buf, &len, &cap, s->type == ACT_SCROLL ? s->scroll : s->count);
+        append_int(&buf, &len, &cap,
+                   s->type == ACT_SCROLL ? s->scroll :
+                   s->type == ACT_CHECK ? (s->ifColor & 0xFFFFFF) : s->count);
         append_str(&buf, &len, &cap, ",", 1);
-        append_int(&buf, &len, &cap, s->interval);
+        append_int(&buf, &len, &cap, s->type == ACT_CHECK ? s->ifTol : s->interval);
         append_str(&buf, &len, &cap, ",", 1);
         if (s->type == ACT_DRAG && (s->x2 || s->y2)) {
             wchar_t tmp[64];
             AC_SWPRINTF(tmp, 64, L"%d,%d", s->x2, s->y2);
             append_field(&buf, &len, &cap, tmp);
-        } else if (s->type == ACT_JUMP && s->jumpTo > 0) {
+        } else if ((s->type == ACT_JUMP || s->type == ACT_CALL) && s->jumpTo > 0) {
             wchar_t tmp[32];
             if (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
                 AC_SWPRINTF(tmp, 32, L"%d:%d", s->jumpTab, s->jumpTo);
@@ -607,7 +672,8 @@ static void bk_row_end(char **buf, size_t *len, size_t *cap)
 }
 
 /* 导出整本任务簿(含 #设置/#任务 分段) */
-char *taskbook_export_csv(const TaskBook *tb, size_t *outLen)
+char *taskbook_export_csv2(const TaskBook *tb, size_t *outLen,
+                           int sched_en, int sched_hh, int sched_mm)
 {
     if (!tb) return NULL;
     size_t cap = 4096, len = 0;
@@ -620,9 +686,10 @@ char *taskbook_export_csv(const TaskBook *tb, size_t *outLen)
     {
         char tmp[160];
         snprintf(tmp, sizeof(tmp),
-                 "#设置,循环次数,%d,循环间隔毫秒,%d,随机抖动毫秒,%d,开始倒计时毫秒,%d,按Excel行数,%d\r\n",
+                 "#设置,循环次数,%d,循环间隔毫秒,%d,随机抖动毫秒,%d,开始倒计时毫秒,%d,按Excel行数,%d,定时启用,%d,定时时,%d,定时分,%d\r\n",
                  tb->tasks[0].loops, tb->tasks[0].loopGap, tb->tasks[0].jitter,
-                 tb->tasks[0].startCountdown, tb->tasks[0].loopsFromExcel ? 1 : 0);
+                 tb->tasks[0].startCountdown, tb->tasks[0].loopsFromExcel ? 1 : 0,
+                 sched_en, sched_hh, sched_mm);
         bk_append(&buf, &len, &cap, tmp, strlen(tmp));
     }
     {   /* 上次使用的TAB数(重启恢复用);tb->count 由 UI 维护 */
@@ -651,11 +718,14 @@ char *taskbook_export_csv(const TaskBook *tb, size_t *outLen)
             bk_sep(&buf, &len, &cap);
             bk_field_n(&buf, &len, &cap, s->y);
             bk_sep(&buf, &len, &cap);
-            bk_field_n(&buf, &len, &cap, s->type == ACT_SCROLL ? s->scroll : s->count);
+            bk_field_n(&buf, &len, &cap,
+                       s->type == ACT_SCROLL ? s->scroll :
+                       s->type == ACT_CHECK ? (s->ifColor & 0xFFFFFF) : s->count);
             bk_sep(&buf, &len, &cap);
-            bk_field_n(&buf, &len, &cap, s->interval);
+            bk_field_n(&buf, &len, &cap,
+                       s->type == ACT_CHECK ? s->ifTol : s->interval);
             bk_sep(&buf, &len, &cap);
-            if (s->type == ACT_JUMP && s->jumpTo > 0) {
+            if ((s->type == ACT_JUMP || s->type == ACT_CALL) && s->jumpTo > 0) {
                 wchar_t jt[32];
                 if (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
                     AC_SWPRINTF(jt, 32, L"%d:%d", s->jumpTab, s->jumpTo);
@@ -683,4 +753,16 @@ char *taskbook_export_csv(const TaskBook *tb, size_t *outLen)
     }
     if (outLen) *outLen = len;
     return buf;
+}
+
+
+/* 旧签名兼容(定时=关闭) */
+char *taskbook_export_csv(const TaskBook *tb, size_t *outLen)
+{
+    return taskbook_export_csv2(tb, outLen, 0, 9, 0);
+}
+
+char *task_export_csv(const Task *t, size_t *outLen)
+{
+    return task_export_csv2(t, outLen, 0, 9, 0);
 }

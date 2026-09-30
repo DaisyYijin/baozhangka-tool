@@ -1,4 +1,4 @@
-/* dlg_edit.h - 步骤编辑对话框 */
+﻿/* dlg_edit.h - 步骤编辑对话框 */
 #ifndef AC_DLG_EDIT_H
 #define AC_DLG_EDIT_H
 
@@ -22,6 +22,10 @@ int pick_step_type_dialog(HWND owner);
 
 /* TAB 重命名:单行输入框。buf 传入当前名,确定返回 1 并写回新名 */
 int rename_tab_dialog(HWND owner, const wchar_t *title, wchar_t *buf, int buflen);
+
+/* 定时执行设置:getter/setter 读写启用/时/分 */
+int sched_dialog(HWND owner, int (*getter)(int *, int *, int *),
+                 void (*setter)(int, int, int));
 
 #ifdef __cplusplus
 }

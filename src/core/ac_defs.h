@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
  * ac_defs.h - 公共数据类型(平台无关)
  * 自动点击器 - 支持 Windows XP 及以上 / Linux x86 / Linux ARM
  * ============================================================ */
@@ -30,6 +30,9 @@ enum {
     ACT_SCROLL,      /* 滚轮(正数向上,负数向下) */
     ACT_DRAG,        /* 鼠标拖动(x,y)->(x2,y2) */
     ACT_JUMP,        /* 跳转到指定步骤 */
+    ACT_WAITWIN,     /* 等待窗口出现(标题包含 text,超时=前延时) */
+    ACT_CHECK,       /* 判断 (x,y) 颜色:满足→跳转(jumpTo/jumpTab),否则继续 */
+    ACT_CALL,        /* 子流程调用:执行目标TAB后返回调用处下一步 */
     ACT_TYPE_COUNT_
 };
 
@@ -49,8 +52,10 @@ typedef struct {
     int      delayAfter;              /* 步骤后延时(毫秒) */
     int      clearFirst;              /* 输入前清空当前输入框(0/1) */
     int      scroll;                  /* 滚动量,正=向上 */
-    int      jumpTo;                  /* 跳转:目标步骤序号(1 起,0=无效) */
-    int      jumpTab;                 /* 跳转:目标任务(0=当前,1~8=步骤TAB) */
+    int      jumpTo;                  /* 跳转/调用/判断:目标步骤序号(1 起) */
+    int      jumpTab;                 /* 跳转/调用/判断:目标任务(0=当前,1~8=TAB) */
+    int      ifColor;                 /* 判断:目标色 0xRRGGBB */
+    int      ifTol;                   /* 判断:每通道容差(0~255) */
     wchar_t  note[AC_NOTE_MAX];       /* 备注 */
 } Step;
 
@@ -64,9 +69,13 @@ typedef struct {
     int      startCountdown;   /* 点击开始后的倒计时(毫秒) */
     int      loopsFromExcel;   /* 勾选:循环次数自动=导入 Excel 的行数 */
     wchar_t  name[AC_TASKNAME_MAX];  /* TAB 显示名(空=默认 步骤N,双击TAB可改名) */
-    /* 数据源:Excel 第一列文本,输入步骤文本中的 {行} 在每轮被替换为对应行 */
+    /* 数据源:每行整行文本(各列以 	 分隔),输入文本中的
+       {行}=选定列,{列名}/{列N}=任意列,逐轮替换 */
     wchar_t **dataRows;
     int      dataRowCount;
+    int      dataSelCol;              /* {行} 使用的列索引(0 起) */
+    wchar_t (*dataColNames)[32];      /* 列名表(导入时记录表头) */
+    int      dataColN;
 } Task;
 
 /* ---- 平台抽象层:引擎通过函数指针调用各平台实现 ---- */
@@ -79,6 +88,8 @@ typedef struct {
     void         (*text_paste)(const wchar_t *text);  /* 剪贴板+Ctrl+V(支持中文) */
     void         (*sleep_ms)(int ms);             /* 可中断睡眠(分片查 stop) */
     uint32_t     (*rand)(void);                   /* 随机数 */
+    int          (*get_pixel)(int x, int y);      /* 屏幕取色 0xRRGGBB,失败 -1;NULL=不支持 */
+    int          (*find_window)(const wchar_t *titleContains); /* 标题包含返回1;NULL=不支持(视为1) */
     volatile int *stop;                           /* 停止标志(非0=请求停止) */
 } Platform;
 

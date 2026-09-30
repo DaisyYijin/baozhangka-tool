@@ -193,6 +193,8 @@ Platform *x11_platform(void)
         p.text_paste = x_text_paste;
         p.sleep_ms = x_sleep_ms;
         p.rand = x_rand;
+        p.get_pixel = NULL;        /* X11 取色暂未实现:判断动作视为不满足 */
+        p.find_window = NULL;      /* X11 窗口匹配暂未实现:等待窗口立即通过 */
         p.stop = &g_stop_flag;
         inited = 1;
     }

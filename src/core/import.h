@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
  * import.h - Excel(xlsx/csv)导入导出、任务文件读写
  *
  * 统一列格式(第一行为表头,顺序不限,可只填部分列):
@@ -40,6 +40,9 @@ unsigned char *read_file_all(const wchar_t *path, size_t *outLen);
 int taskbook_import_csv(TaskBook *tb, const char *utf8Text, size_t len);
 
 /* 将整本任务簿导出为 CSV(含 #设置/#任务 分段) */
+char *taskbook_export_csv2(const TaskBook *tb, size_t *outLen,
+                           int sched_en, int sched_hh, int sched_mm);
+extern int g_imp_sched_en, g_imp_sched_hh, g_imp_sched_mm;
 char *taskbook_export_csv(const TaskBook *tb, size_t *outLen);
 
 /* 单任务版(保留:测试与简易用途) */

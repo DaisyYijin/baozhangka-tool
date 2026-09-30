@@ -47,6 +47,7 @@ enum {
     IDC_BTN_OPEN, IDC_BTN_SAVE, IDC_BTN_START, IDC_BTN_STOP,
     IDC_BTN_HELP,
     IDC_BTN_CHECKER,                /* 打开网页版综合检查工具 */
+    IDC_BTN_SCHED,                  /* 定时执行设置 */
     IDC_ED_LOOPS, IDC_ED_GAP, IDC_ED_COUNTDOWN, IDC_ED_JITTER,
     IDC_BTN_DATA,                 /* Excel 数据行绑定(保留枚举) */
     IDC_CHK_EXCELROWS,            /* 勾选:循环次数=Excel 行数 */
@@ -311,6 +312,19 @@ static void step_desc(const Step *s, wchar_t *buf, int cap)
                        gui_tab_display_name(s->jumpTab - 1), s->jumpTo);
         else
             _snwprintf(buf, cap - 1, L"跳转到第 %d 步", s->jumpTo);
+        break;
+    case ACT_WAITWIN:
+        _snwprintf(buf, cap - 1, L"等待窗口[%ls](超时%ldms)",
+                   s->text, (long)(s->delayBefore > 0 ? s->delayBefore : 30000));
+        break;
+    case ACT_CHECK:
+        _snwprintf(buf, cap - 1, L"判断(%d,%d)色%06X 满足跳第%d步",
+                   s->x, s->y, s->ifColor & 0xFFFFFF, s->jumpTo);
+        break;
+    case ACT_CALL:
+        _snwprintf(buf, cap - 1, L"调用%ls第%d步后返回",
+                   (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
+                       ? gui_tab_display_name(s->jumpTab - 1) : L"本任务", s->jumpTo);
         break;
     default:
         wcscpy(buf, act_type_name(s->type));
@@ -772,8 +786,24 @@ static void refresh_list(void)
         /* 列2:类型 */
         ListView_SetItemText(g_hList, idx, 2, (LPWSTR)act_type_name(s->type));
 
-        /* 列3:坐标 / 跳转目标 */
+        /* 列3:坐标 / 跳转目标 / 新类型目标 */
         switch (s->type) {
+        case ACT_WAITWIN:
+            _snwprintf(buf, 63, L"标题含 %ls", s->text);
+            break;
+        case ACT_CHECK:
+            _snwprintf(buf, 63, L"(%d,%d) 色%06X 满足→%ls第%d步",
+                       s->x, s->y, s->ifColor & 0xFFFFFF,
+                       (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
+                           ? gui_tab_display_name(s->jumpTab - 1) : L"本任务",
+                       s->jumpTo);
+            break;
+        case ACT_CALL:
+            _snwprintf(buf, 63, L"调用 %ls 第%d步(完返回)",
+                       (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
+                           ? gui_tab_display_name(s->jumpTab - 1) : L"本任务",
+                       s->jumpTo);
+            break;
         case ACT_DRAG:
             _snwprintf(buf, 63, L"(%d,%d)→(%d,%d)", s->x, s->y, s->x2, s->y2);
             break;
@@ -1042,6 +1072,45 @@ static void load_task_file(void)
 
 /* ---- 数据源绑定状态与接口(编辑对话框的工作表/表头选择驱动) ---- */
 
+/* 定时执行:每天 HH:MM 自动开始当前任务 */
+static int  g_schedEnabled = 0;
+static int  g_schedHH = 9, g_schedMM = 0;
+static int  g_schedLastDay = -1;      /* 已触发日期,防同日重复 */
+
+static int sched_get(int *en, int *hh, int *mm)
+{
+    *en = g_schedEnabled; *hh = g_schedHH; *mm = g_schedMM;
+    return 1;
+}
+
+static void sched_set(int en, int hh, int mm)
+{
+    g_schedEnabled = en;
+    g_schedHH = hh;
+    g_schedMM = mm;
+    g_schedLastDay = -1;
+    log_add(L"定时执行:%ls(每天 %02d:%02d)",
+            en ? L"已启用" : L"已关闭", hh, mm);
+    autosave();
+}
+
+/* 每分钟检查:到点且今天未触发且空闲则开始 */
+static void sched_tick(void)
+{
+    if (!g_schedEnabled || g_running) return;
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    if (st.wHour != g_schedHH || st.wMinute != g_schedMM) return;
+    if (g_schedLastDay == st.wDay) return;
+    g_schedLastDay = st.wDay;
+    if (g_task.count == 0) {
+        log_add(L"定时触发:当前任务为空,跳过");
+        return;
+    }
+    log_add(L"定时触发:自动开始执行(%02d:%02d)", g_schedHH, g_schedMM);
+    start_run();
+}
+
 /* 当前数据源绑定状态(导入Excel数据后记录,供编辑框内重选) */
 static wchar_t g_bindPath[MAX_PATH] = L"";
 static int  g_bindIsXlsx = 0;
@@ -1051,6 +1120,45 @@ static char g_bindSheetNames[16][48];
 static int  g_bindSheetN = 0;
 static char g_bindColNames[24][48];          /* 当前工作表首行各列名 */
 static int  g_bindColN = 0;
+
+/* 绑定快照按 TAB 独立:切换标签页时把当前绑定存回、载入目标的绑定 */
+struct TabBindSnap {
+    wchar_t path[MAX_PATH];
+    int isXlsx, sheet, col;
+    char sheetNames[16][48]; int sheetN;
+    char colNames[24][48]; int colN;
+};
+static struct TabBindSnap g_tabBind[MAX_TASKS];
+
+static void bind_save(int tab)
+{
+    if (tab < 0 || tab >= MAX_TASKS) return;
+    struct TabBindSnap *b = &g_tabBind[tab];
+    wcsncpy(b->path, g_bindPath, MAX_PATH - 1);
+    b->path[MAX_PATH - 1] = 0;
+    b->isXlsx = g_bindIsXlsx;
+    b->sheet = g_bindSheet;
+    b->col = g_bindCol;
+    b->sheetN = g_bindSheetN;
+    memcpy(b->sheetNames, g_bindSheetNames, sizeof(g_bindSheetNames));
+    b->colN = g_bindColN;
+    memcpy(b->colNames, g_bindColNames, sizeof(g_bindColNames));
+}
+
+static void bind_load(int tab)
+{
+    if (tab < 0 || tab >= MAX_TASKS) return;
+    struct TabBindSnap *b = &g_tabBind[tab];
+    wcsncpy(g_bindPath, b->path, MAX_PATH - 1);
+    g_bindPath[MAX_PATH - 1] = 0;
+    g_bindIsXlsx = b->isXlsx;
+    g_bindSheet = b->sheet;
+    g_bindCol = b->col;
+    g_bindSheetN = b->sheetN;
+    memcpy(g_bindSheetNames, b->sheetNames, sizeof(g_bindSheetNames));
+    g_bindColN = b->colN;
+    memcpy(g_bindColNames, b->colNames, sizeof(g_bindColNames));
+}
 
 int gui_excel_sheet_count(void)
 {
@@ -1198,21 +1306,65 @@ static void collect_data_rows(const Sheet *sh, int col)
         g_task.dataRows = NULL;
         g_task.dataRowCount = 0;
     }
+    free(g_task.dataColNames);
+    g_task.dataColNames = NULL;
+    g_task.dataColN = 0;
+    g_task.dataSelCol = ci;
+    /* 列名表(跳过表头模式取首行为列名;无表头时按 列N 命名) */
+    if (sh->rows > 0) {
+        int cn = sh->cols;
+        if (cn > 24) cn = 24;
+        g_task.dataColNames = (wchar_t (*)[32])calloc((size_t)cn, 32 * sizeof(wchar_t));
+        g_task.dataColN = cn;
+        for (int c = 0; c < cn; c++) {
+            if (skipFirst && sh->cells && sh->cells[0] && sh->cells[0][c]) {
+                wchar_t w[32];
+                if (u8_to_wcs(sh->cells[0][c], w, 31) > 0) {
+                    wcsncpy(g_task.dataColNames[c], w, 31);
+                    continue;
+                }
+            }
+            _snwprintf(g_task.dataColNames[c], 31, L"列%d", c + 1);
+        }
+    }
     static wchar_t wbuf[AC_TEXT_MAX * 2];
     for (int r = skipFirst ? 1 : 0; r < sh->rows; r++) {
         if (!sh->cells || !sh->cells[r]) continue;
-        if (ci >= sh->cols) continue;
-        const char *cell = sh->cells[r][ci];
-        if (!cell || !cell[0]) continue;
-        if (u8_to_wcs(cell, wbuf, AC_TEXT_MAX * 2 - 1) == 0) continue;
-        if (wbuf[0] == L'#' || act_type_from_name(wbuf) >= 0) continue;
-        if (wcscmp(wbuf, L"动作") == 0 || _wcsicmp(wbuf, L"action") == 0 ||
-            wcscmp(wbuf, L"类型") == 0)
-            continue;                                   /* 表头 */
-
-        wchar_t *dup = (wchar_t *)malloc((wcslen(wbuf) + 1) * sizeof(wchar_t));
+        /* 整行:各列以 	 连接(空列止) */
+        wchar_t line[AC_TEXT_MAX * 2];
+        int oi = 0;
+        line[0] = 0;
+        for (int c = 0; c < sh->cols && oi < AC_TEXT_MAX * 2 - 1; c++) {
+            const char *v = sh->cells[r][c];
+            if (!v || !v[0]) break;          /* 行尾 */
+            if (c > 0) line[oi++] = L'	';
+            int m = (int)u8_to_wcs(v, wbuf, AC_TEXT_MAX * 2 - 1);
+            for (int q = 0; q < m && oi < AC_TEXT_MAX * 2 - 1; q++)
+                line[oi++] = wbuf[q];
+            line[oi] = 0;
+        }
+        if (!line[0]) continue;
+        const char *cell = sh->cells[r][ci >= sh->cols ? 0 : ci];
+        (void)cell;
+        {   /* 过滤动作行/表头行(按选定列内容判断) */
+            wchar_t sel[AC_TEXT_MAX];
+            const wchar_t *bsel = line;
+            for (int q = 0; q < ci; q++) {
+                const wchar_t *t2 = wcschr(bsel, L'	');
+                if (!t2) { bsel = L""; break; }
+                bsel = t2 + 1;
+            }
+            const wchar_t *te = wcschr(bsel, L'	');
+            size_t n = te ? (size_t)(te - bsel) : wcslen(bsel);
+            if (n >= AC_TEXT_MAX) n = AC_TEXT_MAX - 1;
+            wcsncpy(sel, bsel, n);
+            sel[n] = 0;
+            if (sel[0] == L'#' || act_type_from_name(sel) >= 0) continue;
+            if (wcscmp(sel, L"动作") == 0 || wcscmp(sel, L"类型") == 0) continue;
+        }
+        wchar_t *dup = (wchar_t *)malloc((wcslen(line) + 1) * sizeof(wchar_t));
         if (!dup) continue;
-        wcscpy(dup, wbuf);
+        wcscpy(dup, line);
         wchar_t **nr = (wchar_t **)realloc(g_task.dataRows,
                 (size_t)(g_task.dataRowCount + 1) * sizeof(wchar_t *));
         if (!nr) { free(dup); break; }
@@ -1558,7 +1710,7 @@ static void autosave_flush(void)
     autosave_path();
     g_taskbook.count = g_tabCount;   /* 随文件持久化,重启恢复TAB数 */
     size_t len = 0;
-    char *csv = taskbook_export_csv(&g_taskbook, &len);
+    char *csv = taskbook_export_csv2(&g_taskbook, &len, g_schedEnabled, g_schedHH, g_schedMM);
     if (!csv) return;
     FILE *f = _wfopen(g_autosavePath, L"wb");
     if (f) {
@@ -1589,6 +1741,12 @@ static void autoload(void)
     if (g_curTask >= g_tabCount) g_curTask = 0;
     g_taskbook.count = g_tabCount;
     log_add(L"已自动恢复上次任务:%d 个步骤(%d 个TAB)", n > 0 ? n : 0, g_tabCount);
+        if (g_imp_sched_en >= 0) {           /* 恢复定时执行设置 */
+            g_schedEnabled = g_imp_sched_en;
+            g_schedHH = g_imp_sched_hh >= 0 ? g_imp_sched_hh : 9;
+            g_schedMM = g_imp_sched_mm >= 0 ? g_imp_sched_mm : 0;
+            g_schedLastDay = -1;
+        }
 }
 
 /* ================= 主窗口过程 ================= */
@@ -1872,6 +2030,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 { L"导入导出", IDC_BTN_IMPORT },
                 { L"使用说明", IDC_BTN_HELP },
                 { L"综合检查", IDC_BTN_CHECKER },   /* 打开网页版四表联审 */
+                { L"定时",     IDC_BTN_SCHED },
             };
             int ny = 14 + (NAV_BTN_H + 6) * 2 + 12;   /* 分隔区之后(任务/日志两页签) */
             int navN = (int)(sizeof(nav) / sizeof(nav[0]));
@@ -1987,6 +2146,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         RegisterHotKey(hwnd, HOTK_STOP, MOD_CONTROL, VK_F12);
         RegisterHotKey(hwnd, HOTK_START, 0, VK_F6);
         SetTimer(hwnd, 3, 30, NULL);          /* 按钮悬停轮询 */
+        SetTimer(hwnd, 9, 60000, NULL);   /* 定时执行检查 */
 
         /* 初始为任务页:隐藏日志页控件 */
         ShowWindow(g_hLog, SW_HIDE);
@@ -2095,6 +2255,10 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_TIMER:
         if (wp == 7) {                  /* 防抖到点:真正写盘 */
             autosave_flush();
+            return 0;
+        }
+        if (wp == 9) {                  /* 定时执行检查(每分钟) */
+            sched_tick();
             return 0;
         }
         if (wp == 3 && !g_uiDlgActive) {     /* 悬停轮询(对话框打开时让位) */
@@ -2227,6 +2391,9 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case IDC_NAV_TASK:  switch_page(0); return 0;
         case IDC_NAV_LOG:   switch_page(1); return 0;
         case IDC_BTN_CHECKER: open_checker_tool(); return 0;
+        case IDC_BTN_SCHED:
+            sched_dialog(hwnd, sched_get, sched_set);
+            return 0;
         case IDC_BTN_LOGCLEAR:
             SetWindowTextW(g_hLog, L"");
             log_add(L"日志已清空");
@@ -2298,7 +2465,9 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case IDC_TAB_ADD:   /* 添加TAB */
             if (!g_running && g_tabCount < MAX_TASKS) {
                 g_tabCount++;
+                bind_save(g_curTask);
                 g_curTask = g_tabCount - 1;
+                bind_load(g_curTask);
                 RECT rc;
                 GetClientRect(hwnd, &rc);
                 layout_children(rc.right, rc.bottom);

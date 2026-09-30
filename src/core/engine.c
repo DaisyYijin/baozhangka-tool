@@ -26,6 +26,9 @@ static const struct { const wchar_t *cn; const wchar_t *en; } ACT_NAMES[] = {
     { L"滚动",   L"scroll" },
     { L"拖动",   L"drag" },
     { L"跳转",   L"jump" },
+    { L"等窗口", L"waitwin" },
+    { L"判断",   L"check" },
+    { L"调用",   L"call" },
 };
 
 const wchar_t *act_type_name(int type)
@@ -89,6 +92,9 @@ void task_init(Task *t)
 void task_free(Task *t)
 {
     free(t->steps);
+    free(t->dataColNames);
+    t->dataColNames = NULL;
+    t->dataColN = 0;
     if (t->dataRows) {
         for (int i = 0; i < t->dataRowCount; i++) free(t->dataRows[i]);
         free(t->dataRows);
@@ -207,28 +213,75 @@ static void do_drag(const Platform *p, const Step *s)
     p->mouse_up(BTN_LEFT);
 }
 
-/* 把文本中的 {行} / {row} 替换为当前轮次对应的数据行 */
+/* 从整行文本(列以 	 分隔)取第 col 列(0 起);列数不足返回空串 */
+static void row_col(const wchar_t *row, int col, wchar_t *out, int cap)
+{
+    out[0] = 0;
+    if (!row || col < 0) return;
+    int c = 0;
+    const wchar_t *b = row;
+    for (;;) {
+        const wchar_t *e = wcschr(b, L'	');
+        if (c == col) {
+            size_t n = e ? (size_t)(e - b) : wcslen(b);
+            if (n >= (size_t)cap) n = (size_t)cap - 1;
+            wcsncpy(out, b, n);
+            out[n] = 0;
+            return;
+        }
+        if (!e) return;
+        b = e + 1;
+        c++;
+    }
+}
+
+/* 解析占位符:返回列索引,-1=不是占位符。
+   支持 {行}/{row}=选定列,{列名}(查列名表),{列N}(1 起) */
+static int resolve_col(const Task *t, const wchar_t *tok)
+{
+    if (wcscmp(tok, L"行") == 0 || wcscmp(tok, L"row") == 0)
+        return t->dataSelCol > 0 ? t->dataSelCol : 0;
+    if (wcsncmp(tok, L"列", 1) == 0 && tok[1] >= L'0' && tok[1] <= L'9')
+        return (int)wcstol(tok + 1, NULL, 10) - 1;
+    for (int i = 0; i < t->dataColN; i++)
+        if (wcscmp(tok, t->dataColNames[i]) == 0) return i;
+    return -1;
+}
+
+/* 把文本中的占位符替换为当前轮次数据行的对应列 */
 static void expand_text(const Task *t, int loop, const wchar_t *src,
                         wchar_t *out, int cap)
 {
     int oi = 0;
-    if (!t || t->dataRowCount <= 0 || !src) {
-        wcsncpy(out, src ? src : L"", cap - 1);
+    if (!src) { out[0] = 0; return; }
+    if (!t || t->dataRowCount <= 0) {
+        wcsncpy(out, src, cap - 1);
         out[cap - 1] = 0;
         return;
     }
     const wchar_t *row = t->dataRows[(loop - 1) % t->dataRowCount];
 
     for (int i = 0; src[i] && oi < cap - 1; ) {
-        if (src[i] == L'{' &&
-            (wcsncmp(src + i, L"{行}", 3) == 0 || AC_WCS_NICMP(src + i, L"{row}", 5) == 0)) {
-            int skip = (src[i + 1] == L'行') ? 3 : 5;      /* {行} 或 {row} */
-            for (const wchar_t *p = row; *p && oi < cap - 1; p++)
-                out[oi++] = *p;
-            i += skip;
-        } else {
-            out[oi++] = src[i++];
+        if (src[i] == L'{') {
+            const wchar_t *e = wcschr(src + i, L'}');
+            if (e && e - src - i < 40) {              /* 占位符限长,防误配 */
+                wchar_t tok[40];
+                size_t n = (size_t)(e - src - i - 1);
+                if (n >= 40) n = 39;
+                wcsncpy(tok, src + i + 1, n);
+                tok[n] = 0;
+                int col = resolve_col(t, tok);
+                if (col >= 0) {
+                    wchar_t val[AC_TEXT_MAX];
+                    row_col(row, col, val, AC_TEXT_MAX);
+                    for (const wchar_t *q = val; *q && oi < cap - 1; q++)
+                        out[oi++] = *q;
+                    i = (int)(e - src) + 1;
+                    continue;
+                }
+            }
         }
+        out[oi++] = src[i++];
     }
     out[oi] = 0;
 }
@@ -265,11 +318,16 @@ int engine_run(TaskBook *tb, int startTab, const Platform *p,
 
     int loop = 0;
     int jumps = 0;                       /* 单轮跳转计数(防互相指向死循环) */
+    struct { Task *t; int i; } callStack[8];
+    int callDepth = 0;
     for (;;) {
         loop++;
         jumps = 0;
+        callDepth = 0;                   /* 每轮从启动任务第1步开始,栈清空 */
         cur = base;                      /* 每轮从启动任务第1步开始 */
-        for (int i = 0; i < cur->count; i++) {
+        int i = 0;
+continue_loop:
+        for (; i < cur->count; i++) {
             Step *s = &cur->steps[i];
             if (*(p->stop)) return ENGINE_STOP;
             if (progressCb) progressCb(loop, i, ud);
@@ -313,24 +371,79 @@ int engine_run(TaskBook *tb, int startTab, const Platform *p,
                 do_drag(p, s);
                 break;
             case ACT_JUMP:
-                /* 跳转到第N步(N为界面序号):i 置为 N-2,经 for 的 i++ 后
-                   落在 0-based N-1。跨TAB时同时切换执行任务。
-                   单轮跳转超上限视为循环配置错误,停止本轮(整体结束)。 */
+            case ACT_CALL:
+                /* 跳转/调用到第N步:跨TAB切换任务;调用压栈,
+                   目标序列执行完自动返回调用处下一步。 */
                 if (++jumps > 10000) return ENGINE_DONE;
                 if (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS &&
                     tb->tasks[s->jumpTab - 1].count > 0 &&
                     s->jumpTo >= 1 && s->jumpTo <= tb->tasks[s->jumpTab - 1].count) {
+                    if (s->type == ACT_CALL && callDepth < 8) {
+                        callStack[callDepth].t = cur;
+                        callStack[callDepth].i = i;
+                        callDepth++;
+                    }
                     cur = &tb->tasks[s->jumpTab - 1];
                     i = s->jumpTo - 2;
                 } else if (s->jumpTo >= 1 && s->jumpTo <= cur->count) {
+                    if (s->type == ACT_CALL && callDepth < 8) {
+                        callStack[callDepth].t = cur;
+                        callStack[callDepth].i = i;
+                        callDepth++;
+                    }
                     i = s->jumpTo - 2;
                 }
                 break;
+            case ACT_WAITWIN: {
+                /* 等待标题包含指定文本的窗口;超时=前延时(默认30s) */
+                int timeout = s->delayBefore > 0 ? s->delayBefore : 30000;
+                int waited = 0;
+                while (!*(p->stop)) {
+                    if (p->find_window ? p->find_window(s->text) : 1) break;
+                    if (waited >= timeout) break;
+                    if (esleep(p, 200)) return ENGINE_STOP;
+                    waited += 200;
+                }
+                break;
+            }
+            case ACT_CHECK: {
+                /* (x,y) 颜色 ≈ ifColor(容差 ifTol):满足→跳转 */
+                int px = p->get_pixel ? p->get_pixel(s->x, s->y) : -1;
+                int match = 0;
+                if (px >= 0) {
+                    int tol = s->ifTol > 0 ? s->ifTol : 0;
+                    int dr = ((px >> 16) & 0xFF) - ((s->ifColor >> 16) & 0xFF);
+                    int dg = ((px >> 8) & 0xFF) - ((s->ifColor >> 8) & 0xFF);
+                    int db = (px & 0xFF) - (s->ifColor & 0xFF);
+                    match = (dr >= -tol && dr <= tol &&
+                             dg >= -tol && dg <= tol && db >= -tol && db <= tol);
+                }
+                if (match && s->jumpTo >= 1) {
+                    if (++jumps > 10000) return ENGINE_DONE;
+                    if (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS &&
+                        tb->tasks[s->jumpTab - 1].count > 0 &&
+                        s->jumpTo <= tb->tasks[s->jumpTab - 1].count) {
+                        cur = &tb->tasks[s->jumpTab - 1];
+                        i = s->jumpTo - 2;
+                    } else if (s->jumpTo <= cur->count) {
+                        i = s->jumpTo - 2;
+                    }
+                }
+                break;
+            }
             default:
                 break;
             }
 
             if (esleep(p, s->delayAfter + jitter_ms(p, cur->jitter))) return ENGINE_STOP;
+        }
+
+        /* 当前序列执行完:子流程调用中则弹出,返回调用处下一步 */
+        if (callDepth > 0) {
+            callDepth--;
+            cur = callStack[callDepth].t;
+            i = callStack[callDepth].i + 1;   /* 返回调用处的下一步(goto回for不先自增) */
+            goto continue_loop;
         }
 
         if (base->loops > 0 && loop >= base->loops) break;   /* 指定轮数(按启动任务) */

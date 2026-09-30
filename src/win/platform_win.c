@@ -273,6 +273,37 @@ static void win_text_paste(const wchar_t *text)
     clip_restore(backup);
 }
 
+/* 屏幕取色 0xRRGGBB,失败 -1 */
+static int win_get_pixel(int x, int y)
+{
+    HDC dc = GetDC(NULL);
+    COLORREF c = GetPixel(dc, x, y);
+    ReleaseDC(NULL, dc);
+    if (c == CLR_INVALID) return -1;
+    return (int)(((c & 0xFF) << 16) | (c & 0x00FF00) | ((c >> 16) & 0xFF));
+}
+
+struct fw_ctx { const wchar_t *needle; int found; };
+
+static BOOL CALLBACK fw_cb(HWND h, LPARAM lp)
+{
+    struct fw_ctx *c = (struct fw_ctx *)lp;
+    if (!IsWindowVisible(h)) return TRUE;
+    wchar_t t[200];
+    int n = GetWindowTextW(h, t, 200);
+    if (n > 0 && wcsstr(t, c->needle)) { c->found = 1; return FALSE; }
+    return TRUE;
+}
+
+/* 标题包含指定文本的可见窗口是否存在 */
+static int win_find_window(const wchar_t *titleContains)
+{
+    if (!titleContains || !titleContains[0]) return 1;
+    struct fw_ctx c = { titleContains, 0 };
+    EnumWindows(fw_cb, (LPARAM)&c);
+    return c.found;
+}
+
 /* ---------------- 其它 ---------------- */
 
 static void win_sleep_ms(int ms)
@@ -330,6 +361,8 @@ Platform *win_platform(void)
         p.text_paste   = win_text_paste;
         p.sleep_ms     = win_sleep_ms;
         p.rand         = win_rand;
+        p.get_pixel    = win_get_pixel;
+        p.find_window  = win_find_window;
         p.stop         = &g_stop_flag;
         inited = 1;
         ac_srand((uint32_t)GetTickCount() ^ (uint32_t)(ptrdiff_t)&g_stop_flag);

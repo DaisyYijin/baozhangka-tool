@@ -206,7 +206,9 @@ static void layout_rows(int type)
 
     /* 行:输入内容 */
     if (text) {
-        set_ctl_text(IDC_LB_TEXT, type == ACT_TEXT ? L"输入内容" : L"按键组合");
+        set_ctl_text(IDC_LB_TEXT,
+                     type == ACT_TEXT ? L"输入内容" :
+                     type == ACT_WAITWIN ? L"窗口标题包含" : L"按键组合");
         show_ctl(IDC_LB_TEXT, 1);
         show_ctl(IDC_TEXT, 1);
         place(IDC_LB_TEXT, LB_X, y + 2, LB_W, 20);
@@ -253,8 +255,23 @@ static void layout_rows(int type)
         show_ctl(IDC_SCROLL, 0);
     }
 
-    /* 行:跳转目标(步骤号 + 目标任务下拉) */
-    if (type == ACT_JUMP) {
+    /* 行:判断颜色(仅判断;复用次数=颜色 间隔=容差) */
+    if (type == ACT_CHECK) {
+        set_ctl_text(IDC_LB_COUNT, L"颜色0xRRGGBB");
+        show_ctl(IDC_LB_COUNT, 1);
+        show_ctl(IDC_COUNT, 1);
+        show_ctl(IDC_INTERVAL, 1);
+        set_ctl_text(IDC_INTERVAL, L"10");
+        place(IDC_LB_COUNT, LB_X, y + 2, LB_W, 20);
+        place(IDC_COUNT, CT_X, y, 90, 22);
+        place(IDC_INTERVAL, CT_X + 98, y, 56, 22);
+        y += ROW_H;
+    }
+    /* 行:跳转/调用/判断满足时目标 */
+    if (type == ACT_JUMP || type == ACT_CALL || type == ACT_CHECK) {
+        set_ctl_text(IDC_LB_JUMP,
+                     type == ACT_CALL ? L"调用目标" :
+                     type == ACT_CHECK ? L"满足则跳转" : L"跳转目标");
         show_ctl(IDC_LB_JUMP, 1);
         show_ctl(IDC_JUMP, 1);
         show_ctl(IDC_JUMPTAB, 1);
@@ -373,6 +390,18 @@ static int collect(void)
         if (n < 1) n = 1;
         if (n > MAX_TASKS) n = MAX_TASKS;
         s->jumpTab = (sel >= 0 && sel < n) ? sel + 1 : 0;
+    }
+    if (s->type == ACT_CHECK) {
+        /* 颜色框是 16 进制文本(如 FF8000 或 0xFF8000) */
+        wchar_t cb[24];
+        get_ctl_text(IDC_COUNT, cb, 23);
+        wchar_t *e;
+        long cv = wcstol(cb, &e, 16);
+        s->ifColor = (int)cv;
+        s->ifTol = get_int(IDC_INTERVAL, 10);
+    } else {
+        s->ifColor = 0;
+        s->ifTol = 0;
     }
     s->delayBefore = get_int(IDC_DELAYB, 0);
     s->delayAfter  = get_int(IDC_DELAYA, 200);
@@ -574,7 +603,7 @@ static void build_controls(void)
  * ============================================================ */
 
 #define TP_W   532
-#define TP_CH  410
+#define TP_CH  478
 #define TP_CARD_W  160
 #define TP_CARD_H  66
 #define TP_GAP     12
@@ -609,8 +638,11 @@ static const struct {
     { ACT_SCROLL,   L"滚轮",   L"上下滚动页面" },
     { ACT_DRAG,     L"拖动",   L"从起点拖到终点" },
     { ACT_JUMP,     L"跳转",   L"跳转到指定步骤" },
+    { ACT_WAITWIN,  L"等窗口", L"等待窗口出现再继续" },
+    { ACT_CHECK,    L"判断",   L"屏幕颜色判断分支" },
+    { ACT_CALL,     L"调用",   L"执行另一TAB后返回" },
 };
-#define TP_COUNT 11
+#define TP_COUNT 14
 
 /* GDI 绘制类型小图标(36x36,QQ 蓝) */
 static void draw_type_icon(HDC dc, int x, int y, int type)
@@ -705,6 +737,50 @@ static void draw_type_icon(HDC dc, int x, int y, int type)
         Polygon(dc, tri, 3);
         SelectObject(dc, obb);
         DeleteObject(br);
+        break;
+    }
+    case ACT_WAITWIN: {
+        /* 窗形 + 沙漏:等待窗口 */
+        Rectangle(dc, x + 4, y + 6, x + 30, y + 26);
+        MoveToEx(dc, x + 4, y + 11, NULL); LineTo(dc, x + 30, y + 11);
+        MoveToEx(dc, x + 13, y + 14, NULL); LineTo(dc, x + 21, y + 22);
+        MoveToEx(dc, x + 21, y + 14, NULL); LineTo(dc, x + 13, y + 22);
+        break;
+    }
+    case ACT_CHECK: {
+        /* 判断:色块 + 分支 */
+        HBRUSH db2 = CreateSolidBrush(col);
+        HGDIOBJ ob2 = SelectObject(dc, db2);
+        Rectangle(dc, x + 2, y + 12, x + 12, y + 22);
+        SelectObject(dc, ob2);
+        DeleteObject(db2);
+        MoveToEx(dc, x + 12, y + 17, NULL); LineTo(dc, x + 20, y + 17);
+        MoveToEx(dc, x + 20, y + 5, NULL); LineTo(dc, x + 20, y + 29);
+        MoveToEx(dc, x + 20, y + 5, NULL); LineTo(dc, x + 31, y + 5);
+        MoveToEx(dc, x + 20, y + 29, NULL); LineTo(dc, x + 31, y + 29);
+        break;
+    }
+    case ACT_CALL: {
+        /* 调用:去程箭头 + 回程虚线 */
+        MoveToEx(dc, x + 3, y + 10, NULL); LineTo(dc, x + 26, y + 10);
+        POINT t3[3] = { {x + 26, y + 4}, {x + 26, y + 16}, {x + 34, y + 10} };
+        HBRUSH db3 = CreateSolidBrush(col);
+        HGDIOBJ ob3 = SelectObject(dc, db3);
+        Polygon(dc, t3, 3);
+        SelectObject(dc, ob3);
+        DeleteObject(db3);
+        HPEN dp = CreatePen(PS_DOT, 1, col);
+        SelectObject(dc, dp);
+        MoveToEx(dc, x + 31, y + 24, NULL); LineTo(dc, x + 8, y + 24);
+        POINT t4[3] = { {x + 8, y + 18}, {x + 8, y + 30}, {x, y + 24} };
+        SelectObject(dc, db3);
+        HBRUSH db4 = CreateSolidBrush(col);
+        SelectObject(dc, db4);
+        Polygon(dc, t4, 3);
+        SelectObject(dc, ob3);
+        DeleteObject(db4);
+        SelectObject(dc, pen);
+        DeleteObject(dp);
         break;
     }
     case ACT_DRAG: {
@@ -985,7 +1061,7 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
     g_edit.hwnd = CreateWindowExW(
         WS_EX_DLGMODALFRAME, EDIT_DLG_CLASS, title,
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        cx, cy, DLG_CW + 16, 460,
+        cx, cy, TP_W + 16, TP_CH + 34,
         owner, NULL, wc.hInstance, NULL);
     if (!g_edit.hwnd) return 0;
 
@@ -1000,6 +1076,13 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
     set_int(IDC_Y2, s->y2);
     set_int(IDC_SCROLL, s->scroll != 0 ? s->scroll : 3);
     set_int(IDC_JUMP, s->jumpTo);
+    if (s->type == ACT_CHECK) {
+        wchar_t cb[16];
+        _snwprintf(cb, 15, L"%06X", s->ifColor & 0xFFFFFF);
+        cb[15] = 0;
+        set_ctl_text(IDC_COUNT, cb);
+        set_int(IDC_INTERVAL, s->ifTol > 0 ? s->ifTol : 10);
+    }
     {   /* 目标任务下拉:只列当前实际存在的TAB;默认选中当前任务 */
         HWND cb = g_edit.ctl[IDC_JUMPTAB - 100];
         int n = gui_tab_count();
@@ -1070,6 +1153,144 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
     UnregisterClassW(EDIT_DLG_CLASS, wc.hInstance);
     SetForegroundWindow(owner);
     return g_edit.ok;
+}
+
+/* ================= 定时执行设置对话框(gui.c 数据/入口) ================= */
+
+static const wchar_t SCHED_DLG_CLASS[] = L"AcSchedDlg";
+static HWND g_sdHwnd, g_sdHH, g_sdMM, g_sdChk;
+static int  g_sdDone, g_sdOk;
+static int (*g_sdGet)(int *en, int *hh, int *mm);      /* 读取当前设置 */
+static void (*g_sdSet)(int en, int hh, int mm);        /* 保存设置 */
+
+static LRESULT CALLBACK sched_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_COMMAND:
+        if (LOWORD(wp) == IDOK) { g_sdOk = 1; g_sdDone = 1; return 0; }
+        if (LOWORD(wp) == IDCANCEL) { g_sdDone = 1; return 0; }
+        break;
+    case WM_CLOSE:
+        g_sdDone = 1;
+        return 0;
+    case WM_DRAWITEM: {
+        DRAWITEMSTRUCT *dis = (DRAWITEMSTRUCT *)lp;
+        if (dis->CtlType == ODT_BUTTON) draw_flat_button(dis);
+        return TRUE;
+    }
+    case WM_CTLCOLORSTATIC:
+        SetBkColor((HDC)wp, CARD_BG);
+        SetTextColor((HDC)wp, RGB(0x2E, 0x2E, 0x2E));
+        return (LRESULT)GetStockObject(WHITE_BRUSH);
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+/* 弹出定时设置;getter/setter 由 gui.c 提供(读写 g_sched*) */
+int sched_dialog(HWND owner, int (*getter)(int *, int *, int *),
+                 void (*setter)(int, int, int))
+{
+    g_sdGet = getter;
+    g_sdSet = setter;
+    int en = 0, hh = 9, mm = 0;
+    if (getter) getter(&en, &hh, &mm);
+
+    WNDCLASSW wc;
+    memset(&wc, 0, sizeof(wc));
+    wc.lpfnWndProc = sched_wndproc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = SCHED_DLG_CLASS;
+    wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+    wc.hCursor = LoadCursorW(NULL, (LPCWSTR)IDC_ARROW);
+    RegisterClassW(&wc);
+
+    RECT rcOwner;
+    GetWindowRect(owner, &rcOwner);
+    int cw = 320, ch = 168;
+    int cx = rcOwner.left + ((rcOwner.right - rcOwner.left) - cw) / 2;
+    int cy = rcOwner.top + ((rcOwner.bottom - rcOwner.top) - ch) / 2;
+    if (cx < 0) cx = 60;
+    if (cy < 0) cy = 60;
+
+    g_sdHwnd = CreateWindowExW(WS_EX_DLGMODALFRAME, SCHED_DLG_CLASS, L"定时执行",
+                               WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+                               cx, cy, cw, ch, owner, NULL, wc.hInstance, NULL);
+    if (!g_sdHwnd) { UnregisterClassW(SCHED_DLG_CLASS, wc.hInstance); return 0; }
+
+    HWND lbl = CreateWindowExW(0, L"STATIC", L"每天", WS_CHILD | WS_VISIBLE,
+                               16, 18, 36, 20, g_sdHwnd, NULL, wc.hInstance, NULL);
+    wchar_t v[8];
+    _snwprintf(v, 7, L"%d", hh);
+    g_sdHH = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", v,
+                             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_NUMBER,
+                             56, 15, 40, 24, g_sdHwnd, NULL, wc.hInstance, NULL);
+    HWND c1 = CreateWindowExW(0, L"STATIC", L":", WS_CHILD | WS_VISIBLE,
+                              100, 18, 8, 20, g_sdHwnd, NULL, wc.hInstance, NULL);
+    _snwprintf(v, 7, L"%d", mm);
+    g_sdMM = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", v,
+                             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_NUMBER,
+                             110, 15, 40, 24, g_sdHwnd, NULL, wc.hInstance, NULL);
+    HWND lbl2 = CreateWindowExW(0, L"STATIC", L"自动运行当前任务(时 0~23,分 0~59)",
+                                WS_CHILD | WS_VISIBLE,
+                                16, 48, 280, 20, g_sdHwnd, NULL, wc.hInstance, NULL);
+    g_sdChk = CreateWindowExW(0, L"BUTTON", L"启用定时(每天一次,到点自动开始)",
+                              WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                              16, 76, 286, 22, g_sdHwnd, NULL, wc.hInstance, NULL);
+    SendMessageW(g_sdChk, BM_SETCHECK, en ? BST_CHECKED : BST_UNCHECKED, 0);
+    HWND btnOk = CreateWindowExW(0, L"BUTTON", L"确定",
+                                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | WS_TABSTOP,
+                                 cw - 216, 126, 96, 27, g_sdHwnd, (HMENU)IDOK, wc.hInstance, NULL);
+    HWND btnCa = CreateWindowExW(0, L"BUTTON", L"取消",
+                                 WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | WS_TABSTOP,
+                                 cw - 112, 126, 96, 27, g_sdHwnd, (HMENU)IDCANCEL, wc.hInstance, NULL);
+    (void)lbl; (void)c1; (void)lbl2; (void)btnOk; (void)btnCa;
+    if (g_uiFont) {
+        HWND all[] = { lbl, g_sdHH, c1, g_sdMM, lbl2, g_sdChk, btnOk, btnCa };
+        for (int i = 0; i < 8; i++) SendMessageW(all[i], WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+    }
+
+    ShowWindow(g_sdHwnd, SW_SHOW);
+    UpdateWindow(g_sdHwnd);
+    SetFocus(g_sdHH);
+    EnableWindow(owner, FALSE);
+    g_uiDlgActive = 1;
+    g_uiHotBtn = NULL;
+    g_sdDone = 0;
+    g_sdOk = 0;
+
+    MSG msg;
+    while (!g_sdDone) {
+        if (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) break;
+            if (msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN) {
+                PostMessageW(g_sdHwnd, WM_COMMAND, MAKELONG(IDOK, 0), 0);
+                continue;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        } else {
+            WaitMessage();
+        }
+    }
+
+    if (g_sdOk) {
+        wchar_t b1[8] = L"";
+        GetWindowTextW(g_sdHH, b1, 7);
+        int h2 = _wtoi(b1);
+        GetWindowTextW(g_sdMM, b1, 7);
+        int m2 = _wtoi(b1);
+        if (h2 < 0) h2 = 0;  if (h2 > 23) h2 = 23;
+        if (m2 < 0) m2 = 0;  if (m2 > 59) m2 = 59;
+        if (g_sdSet) g_sdSet(SendMessageW(g_sdChk, BM_GETCHECK, 0, 0) == BST_CHECKED,
+                             h2, m2);
+    }
+    g_uiDlgActive = 0;
+    g_uiHotBtn = NULL;
+    EnableWindow(owner, TRUE);
+    DestroyWindow(g_sdHwnd);
+    UnregisterClassW(SCHED_DLG_CLASS, wc.hInstance);
+    SetForegroundWindow(owner);
+    return g_sdOk;
 }
 
 /* ================= TAB 重命名对话框(双击步骤TAB弹出) ================= */
