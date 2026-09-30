@@ -2008,6 +2008,15 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             mk(L"BUTTON", L"开始检查", BS_OWNERDRAW, 0, 0, 96, 28, IDC_CHK_RUN);
             mk(L"BUTTON", L"导出结果", BS_OWNERDRAW, 0, 0, 96, 28, IDC_CHK_EXPORT);
             mk(L"STATIC", L"未检查", 0, 0, 0, 360, 20, IDC_CHK_ST);
+            /* 检查页控件默认隐藏(仅 page==2 显示);创建时可见会叠在任务页上 */
+            for (int k = 0; k < 4; k++) {
+                ShowWindow(GetDlgItem(hwnd, IDC_CHK_LB1 + k), SW_HIDE);
+                ShowWindow(GetDlgItem(hwnd, IDC_CHK_E1 + k), SW_HIDE);
+                ShowWindow(GetDlgItem(hwnd, IDC_CHK_B1 + k), SW_HIDE);
+            }
+            ShowWindow(GetDlgItem(hwnd, IDC_CHK_RUN), SW_HIDE);
+            ShowWindow(GetDlgItem(hwnd, IDC_CHK_EXPORT), SW_HIDE);
+            ShowWindow(GetDlgItem(hwnd, IDC_CHK_ST), SW_HIDE);
             g_hRList = CreateWindowExW(0, WC_LISTVIEWW, L"",
                                        WS_CHILD | LVS_REPORT | LVS_SHOWSELALWAYS |
                                        LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES |
