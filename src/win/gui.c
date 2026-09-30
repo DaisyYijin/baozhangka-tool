@@ -792,11 +792,18 @@ static void refresh_list(void)
             _snwprintf(buf, 63, L"标题含 %ls", s->text);
             break;
         case ACT_CHECK:
-            _snwprintf(buf, 63, L"(%d,%d) 色%06X 满足→%ls第%d步",
-                       s->x, s->y, s->ifColor & 0xFFFFFF,
-                       (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
-                           ? gui_tab_display_name(s->jumpTab - 1) : L"本任务",
-                       s->jumpTo);
+            if (s->w > 0 || s->h > 0)
+                _snwprintf(buf, 63, L"区域(%d,%d)+%dx%d 色%06X 满足→%ls第%d步",
+                           s->x, s->y, s->w, s->h, s->ifColor & 0xFFFFFF,
+                           (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
+                               ? gui_tab_display_name(s->jumpTab - 1) : L"本任务",
+                           s->jumpTo);
+            else
+                _snwprintf(buf, 63, L"(%d,%d) 色%06X 满足→%ls第%d步",
+                           s->x, s->y, s->ifColor & 0xFFFFFF,
+                           (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
+                               ? gui_tab_display_name(s->jumpTab - 1) : L"本任务",
+                           s->jumpTo);
             break;
         case ACT_CALL:
             _snwprintf(buf, 63, L"调用 %ls 第%d步(完返回)",

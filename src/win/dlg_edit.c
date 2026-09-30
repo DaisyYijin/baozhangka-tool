@@ -26,6 +26,7 @@ enum {
     IDC_PICKXY, IDC_PICKXY2, IDC_BTN_IMPEXCEL,
     IDC_LB_XY, IDC_LB_COUNT, IDC_LB_TEXT, IDC_LB_SCROLL, IDC_LB_XY2, IDC_LB_DELAY,
     IDC_LB_NOTE, IDC_LB_JUMP, IDC_JUMP, IDC_JUMPTAB,
+    IDC_LB_W,
     IDC_IMPSHEET, IDC_IMPCOL,
 };
 
@@ -255,6 +256,21 @@ static void layout_rows(int type)
         show_ctl(IDC_SCROLL, 0);
     }
 
+    /* 行:判断区域宽高(0=单点;取色拖框自动填) */
+    if (type == ACT_CHECK) {
+        show_ctl(IDC_LB_W, 1);
+        show_ctl(IDC_W, 1);
+        show_ctl(IDC_H, 1);
+        place(IDC_LB_W, LB_X, y + 2, LB_W, 20);
+        place(IDC_W, CT_X, y, 56, 22);
+        place(IDC_H, CT_X + 64, y, 56, 22);
+        set_ctl_text(IDC_LB_W, L"区域W/H(0单点)");
+        y += ROW_H;
+    } else {
+        show_ctl(IDC_LB_W, 0);
+        show_ctl(IDC_W, 0);
+        show_ctl(IDC_H, 0);
+    }
     /* 行:判断颜色(仅判断;复用次数=颜色 间隔=容差) */
     if (type == ACT_CHECK) {
         set_ctl_text(IDC_LB_COUNT, L"颜色0xRRGGBB");
@@ -350,6 +366,26 @@ static void do_pick(int which)
     if (which == 0) {
         set_int(IDC_X, r.x);
         set_int(IDC_Y, r.y);
+        if (g_edit.step->type == ACT_CHECK) {
+            /* 判断:取点同时抓取该处颜色;拖框则填入区域并取框中心色 */
+            HDC dc = GetDC(NULL);
+            int cx2 = r.x, cy2 = r.y;
+            if (r.w > 0 && r.h > 0) {
+                set_int(IDC_W, r.w);
+                set_int(IDC_H, r.h);
+                cx2 = r.x + r.w / 2;
+                cy2 = r.y + r.h / 2;
+            }
+            COLORREF c = GetPixel(dc, cx2, cy2);
+            ReleaseDC(NULL, dc);
+            if (c != CLR_INVALID) {
+                wchar_t cb[16];
+                _snwprintf(cb, 15, L"%02X%02X%02X",
+                           (int)(c & 0xFF), (int)((c >> 8) & 0xFF), (int)((c >> 16) & 0xFF));
+                cb[15] = 0;
+                set_ctl_text(IDC_COUNT, cb);
+            }
+        }
         /* 屏幕上留下置顶预览标记:序号 · 动作 */
         mark_preview(r.x, r.y, g_edit.step->type, g_mark_seq);
     } else {
@@ -392,6 +428,10 @@ static int collect(void)
         s->jumpTab = (sel >= 0 && sel < n) ? sel + 1 : 0;
     }
     if (s->type == ACT_CHECK) {
+        s->w = get_int(IDC_W, 0);
+        s->h = get_int(IDC_H, 0);
+        if (s->w < 0) s->w = 0;
+        if (s->h < 0) s->h = 0;
         /* 颜色框是 16 进制文本(如 FF8000 或 0xFF8000) */
         wchar_t cb[24];
         get_ctl_text(IDC_COUNT, cb, 23);
@@ -551,6 +591,10 @@ static void build_controls(void)
     /* 坐标/起点行 */
     g_edit.ctl[IDC_LB_XY - 100] = mk_ctl(L"STATIC", L"坐标 X / Y", SS_RIGHT, IDC_LB_XY, LB_W, 20);
     CTL(L"EDIT", L"", WS_BORDER | ES_NUMBER, IDC_X, 64, 22);
+    /* 判断区域宽高(0=单点);默认隐藏 */
+    g_edit.ctl[IDC_LB_W - 100] = mk_ctl(L"STATIC", L"区域 W / H", SS_RIGHT, IDC_LB_W, LB_W, 20);
+    CTL(L"EDIT", L"", WS_BORDER | ES_NUMBER, IDC_W, 56, 22);
+    CTL(L"EDIT", L"", WS_BORDER | ES_NUMBER, IDC_H, 56, 22);
     CTL(L"EDIT", L"", WS_BORDER | ES_NUMBER, IDC_Y, 64, 22);
     CTL(L"BUTTON", L"≡ 屏幕取点", BS_OWNERDRAW, IDC_PICKXY, 100, 26);
 
@@ -1077,6 +1121,8 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
     set_int(IDC_SCROLL, s->scroll != 0 ? s->scroll : 3);
     set_int(IDC_JUMP, s->jumpTo);
     if (s->type == ACT_CHECK) {
+        set_int(IDC_W, s->w);
+        set_int(IDC_H, s->h);
         wchar_t cb[16];
         _snwprintf(cb, 15, L"%06X", s->ifColor & 0xFFFFFF);
         cb[15] = 0;

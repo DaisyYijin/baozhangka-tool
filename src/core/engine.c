@@ -407,16 +407,28 @@ continue_loop:
                 break;
             }
             case ACT_CHECK: {
-                /* (x,y) 颜色 ≈ ifColor(容差 ifTol):满足→跳转 */
-                int px = p->get_pixel ? p->get_pixel(s->x, s->y) : -1;
+                /* (x,y) 颜色 ≈ ifColor(容差 ifTol):满足→跳转。
+                   w/h>0 时为区域判断:在区域内扫描查找目标色(步长2) */
+                int tol = s->ifTol > 0 ? s->ifTol : 0;
                 int match = 0;
-                if (px >= 0) {
-                    int tol = s->ifTol > 0 ? s->ifTol : 0;
-                    int dr = ((px >> 16) & 0xFF) - ((s->ifColor >> 16) & 0xFF);
-                    int dg = ((px >> 8) & 0xFF) - ((s->ifColor >> 8) & 0xFF);
-                    int db = (px & 0xFF) - (s->ifColor & 0xFF);
-                    match = (dr >= -tol && dr <= tol &&
-                             dg >= -tol && dg <= tol && db >= -tol && db <= tol);
+                if (p->get_pixel) {
+                    int x0 = s->x, y0 = s->y;
+                    int x1 = (s->w > 0) ? s->x + s->w : s->x;
+                    int y1 = (s->h > 0) ? s->y + s->h : s->y;
+                    for (int yy = y0; yy <= y1 && !match; yy += 1) {
+                        for (int xx = x0; xx <= x1; xx += 1) {
+                            int px = p->get_pixel(xx, yy);
+                            if (px < 0) continue;
+                            int dr = ((px >> 16) & 0xFF) - ((s->ifColor >> 16) & 0xFF);
+                            int dg = ((px >> 8) & 0xFF) - ((s->ifColor >> 8) & 0xFF);
+                            int db = (px & 0xFF) - (s->ifColor & 0xFF);
+                            if (dr >= -tol && dr <= tol &&
+                                dg >= -tol && dg <= tol && db >= -tol && db <= tol) {
+                                match = 1;
+                                break;
+                            }
+                        }
+                    }
                 }
                 if (match && s->jumpTo >= 1) {
                     if (++jumps > 10000) return ENGINE_DONE;

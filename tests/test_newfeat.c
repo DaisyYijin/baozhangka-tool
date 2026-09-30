@@ -27,6 +27,10 @@ static void paste_cb(const wchar_t *t) {
 static void slp(int ms) { (void)ms; }
 static uint32_t rnd(void) { return 0; }
 static int mock_pixel(int x, int y) { (void)x; (void)y; return g_pixVal; }
+static int area_mock_pixel(int x, int y)          /* 仅 (57,63)=红,其余黑 */
+{
+    return (x == 57 && y == 63) ? 0xFF0000 : 0x000000;
+}
 static int mock_findwin(const wchar_t *t) { return wcsstr(g_winTitle, t) != NULL; }
 
 static int fails = 0;
@@ -149,6 +153,44 @@ int main(void)
         g_n = 0;
         engine_run(&tb, 0, &p, NULL, NULL);
         CHECK(g_n == 3, "取色失败按不满足处理");
+
+        task_clear(A);
+    }
+
+    /* ============ 3.5) 区域颜色判断 ============ */
+    {
+        Task *A = &tb.tasks[0];
+        A->loops = 1;
+        Step c1; memset(&c1, 0, sizeof(c1)); c1.type = ACT_CLICK; c1.x = 51;
+        Step c2; memset(&c2, 0, sizeof(c2));
+        c2.type = ACT_CHECK; c2.x = 0; c2.y = 0; c2.w = 100; c2.h = 100;
+        c2.ifColor = 0xFF0000; c2.ifTol = 0;
+        c2.jumpTo = 4;                        /* 满足 → 第4步(跳过52) */
+        Step c3; memset(&c3, 0, sizeof(c3)); c3.type = ACT_CLICK; c3.x = 52;
+        Step c4; memset(&c4, 0, sizeof(c4)); c4.type = ACT_CLICK; c4.x = 53;
+        task_add(A, &c1); task_add(A, &c2); task_add(A, &c3); task_add(A, &c4);
+
+        /* mock 像素:仅 (57,63) 为目标色,其余全黑 */
+        static int px_call = 0;
+        (void)px_call;
+        g_pixVal = 0x000000;
+        /* 用自定义 mock 不便改值——本套 mock 是常量;改用临时 Platform */
+        Platform p2 = p;
+        p2.get_pixel = area_mock_pixel;
+        g_n = 0;
+        engine_run(&tb, 0, &p2, NULL, NULL);
+        printf("区域判断: ");
+        for (int i = 0; i < g_n; i++) printf("%d ", g_clicks[i]);
+        printf("\n");
+        int ok3 = (g_n == 2 && g_clicks[0] == 51 && g_clicks[1] == 53);
+        CHECK(ok3, "区域扫描应在(57,63)命中→51,53");
+
+        /* 区域内无目标色(缩小区域避开命中点;改已添加的步骤) */
+        A->steps[1].w = 50; A->steps[1].h = 50;
+        g_n = 0;
+        engine_run(&tb, 0, &p2, NULL, NULL);
+        CHECK(g_n == 3, "区域不含目标色应顺序执行");
+        A->steps[1].w = 100; A->steps[1].h = 100;
 
         task_clear(A);
     }
