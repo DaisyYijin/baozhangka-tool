@@ -26,7 +26,6 @@
 #include "engine.h"
 #include "sheet.h"
 #include "zip.h"
-#include "checker.h"
 #include "import.h"
 #include "u8.h"
 #include "platform_win.h"
@@ -47,12 +46,7 @@ enum {
     IDC_BTN_PICK, IDC_BTN_IMPORT, IDC_BTN_FLOAT,
     IDC_BTN_OPEN, IDC_BTN_SAVE, IDC_BTN_START, IDC_BTN_STOP,
     IDC_BTN_HELP,
-    IDC_NAV_CHECK,                  /* 检查页(四表联审) */
-    IDC_CHK_E1, IDC_CHK_E2, IDC_CHK_E3, IDC_CHK_E4,   /* 路径显示框 */
-    IDC_CHK_B1, IDC_CHK_B2, IDC_CHK_B3, IDC_CHK_B4,   /* 浏览按钮 */
-    IDC_CHK_RUN, IDC_CHK_EXPORT, IDC_RLIST,
-    IDC_CHK_LB1, IDC_CHK_LB2, IDC_CHK_LB3, IDC_CHK_LB4,
-    IDC_CHK_ST,
+    IDC_BTN_CHECKER,                /* 打开网页版综合检查工具 */
     IDC_ED_LOOPS, IDC_ED_GAP, IDC_ED_COUNTDOWN, IDC_ED_JITTER,
     IDC_BTN_DATA,                 /* Excel 数据行绑定(保留枚举) */
     IDC_CHK_EXCELROWS,            /* 勾选:循环次数=Excel 行数 */
@@ -97,10 +91,7 @@ static TaskBook g_taskbook;                 /* 任务簿(8 TAB) */
 #define g_task (g_taskbook.tasks[g_curTask])/* 当前任务(旧代码无缝适配) */
 static int  g_running = 0;
 static HANDLE g_thread = NULL;
-static int  g_page = 0;        /* 0=任务页 1=日志页 2=检查页 */
-static HWND g_hRList = NULL;   /* 检查页结果列表 */
-static wchar_t g_chkPath[4][MAX_PATH];   /* 四表文件路径 */
-static CheckResult g_chkRes;   /* 最近一次联审结果 */
+static int  g_page = 0;        /* 0=任务页 1=日志页 */
 
 /* ---- 共享 UI 资源(见 ui_shared.h) ---- */
 HFONT g_uiFont, g_uiFontBold, g_uiFontTitle, g_uiFontSub;
@@ -1345,147 +1336,26 @@ enum {
     CTX_EDIT, CTX_DEL, CTX_UP, CTX_DOWN, CTX_DUP
 };
 
-/* ================= 检查页:四表联审(原生实现) ================= */
-
-static const wchar_t *kChkTabNames[4] = { L"保障卡", L"人资", L"财务", L"被装" };
-
-/* 浏览选择文件(序号 0~3) */
-static void chk_pick_file(int idx)
+/* 打开网页版「保障卡综合检查工具」:
+   优先 exe 旁的 保障卡综合检查工具\主程序.html(从 Release 下载
+   baozhangka-checker-web.zip 解压);未找到时提示 */
+static void open_checker_tool(void)
 {
-    wchar_t path[MAX_PATH] = L"";
-    OPENFILENAMEW ofn;
-    memset(&ofn, 0, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = g_hMain;
-    ofn.lpstrFilter = L"Excel / CSV (*.xlsx;*.csv)\0*.xlsx;*.csv\0所有文件 (*.*)\0*.*\0";
-    ofn.lpstrFile = path;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
-    ofn.lpstrTitle = L"选择数据文件";
-    if (!GetOpenFileNameW(&ofn)) return;
-    wcsncpy(g_chkPath[idx], path, MAX_PATH - 1);
-    g_chkPath[idx][MAX_PATH - 1] = 0;
-    HWND ed = GetDlgItem(g_hMain, IDC_CHK_E1 + idx);
-    if (ed) SetWindowTextW(ed, path);
-}
-
-/* 解析一个数据文件到 Sheet(xlsx/csv),失败返回非 0 */
-static int chk_load(int idx, Sheet *sh)
-{
-    memset(sh, 0, sizeof(*sh));
-    if (!g_chkPath[idx][0]) return 0;                 /* 未选择 = 不参与 */
-    size_t len = 0;
-    unsigned char *data = read_file_all(g_chkPath[idx], &len);
-    if (!data) return -1;
-    int ok;
-    if (len >= 4 && data[0] == 'P' && data[1] == 'K')
-        ok = xlsx_parse(data, len, sh);
-    else
-        ok = csv_parse(data, len, win_gbk_to_utf8, sh);
-    free(data);
-    return ok;
-}
-
-/* 执行联审并填充结果列表 */
-static void chk_run(void)
-{
-    if (g_running) return;
-    int picked = 0;
-    for (int i = 0; i < 4; i++)
-        if (g_chkPath[i][0]) picked++;
-    if (picked < 2) {
-        msg_info(L"请至少选择两个数据文件(保障卡表 + 对照表)再开始检查。");
-        return;
+    wchar_t dir[MAX_PATH], html[MAX_PATH + 64];
+    GetModuleFileNameW(NULL, dir, MAX_PATH);
+    wchar_t *p = wcsrchr(dir, L'\\');
+    if (p) *(p + 1) = 0;
+    _snwprintf(html, MAX_PATH + 63, L"%ls保障卡综合检查工具\\主程序.html", dir);
+    html[MAX_PATH + 63] = 0;
+    if (GetFileAttributesW(html) != INVALID_FILE_ATTRIBUTES) {
+        ShellExecuteW(NULL, L"open", html, NULL, NULL, SW_SHOWNORMAL);
+        log_add(L"已打开综合检查工具(浏览器)");
+    } else {
+        msg_info(L"未找到综合检查工具。\n\n"
+                 L"请从 GitHub Release 下载 baozhangka-checker-web.zip,\n"
+                 L"解压到本程序所在目录(与 exe 同级),使存在:\n"
+                 L"  保障卡综合检查工具\\主程序.html");
     }
-
-    Sheet sh[4];
-    for (int i = 0; i < 4; i++) {
-        int r = chk_load(i, &sh[i]);
-        if (r != 0) {
-            wchar_t m[200];
-            _snwprintf(m, 199, L"「%ls」文件读取/解析失败。", kChkTabNames[i]);
-            m[199] = 0;
-            msg_err(m);
-            for (int j = 0; j < i; j++) sheet_free(&sh[j]);
-            return;
-        }
-    }
-
-    checker_free(&g_chkRes);
-    int rc = checker_run(sh[0].rows ? &sh[0] : NULL, sh[1].rows ? &sh[1] : NULL,
-                         sh[2].rows ? &sh[2] : NULL, sh[3].rows ? &sh[3] : NULL,
-                         &g_chkRes);
-    for (int i = 0; i < 4; i++) sheet_free(&sh[i]);
-
-    ListView_DeleteAllItems(g_hRList);
-    if (rc != 0) {
-        msg_err(g_chkRes.err);
-        return;
-    }
-    LVITEMW lvi;
-    wchar_t buf[16];
-    for (int i = 0; i < g_chkRes.issueCount; i++) {
-        CheckIssue *it = &g_chkRes.issues[i];
-        memset(&lvi, 0, sizeof(lvi));
-        lvi.mask = LVIF_TEXT;
-        lvi.iItem = i;
-        _snwprintf(buf, 15, L"%d", i + 1);
-        lvi.pszText = buf;
-        ListView_InsertItem(g_hRList, &lvi);
-        ListView_SetItemText(g_hRList, i, 1, it->type);
-        ListView_SetItemText(g_hRList, i, 2, it->name);
-        ListView_SetItemText(g_hRList, i, 3, it->idcard);
-        ListView_SetItemText(g_hRList, i, 4, it->source);
-        ListView_SetItemText(g_hRList, i, 5, it->desc);
-    }
-    wchar_t st[128];
-    _snwprintf(st, 127, L"比对 %d 人:正常 %d 人,问题 %d 人(共 %d 条记录)",
-               g_chkRes.total, g_chkRes.total - g_chkRes.issuePersons,
-               g_chkRes.issuePersons, g_chkRes.issueCount);
-    st[127] = 0;
-    HWND stw = GetDlgItem(g_hMain, IDC_CHK_ST);
-    if (stw) SetWindowTextW(stw, st);
-    log_add(L"四表联审:%d 人,问题 %d 人(保障卡%d/人资%d/财务%d/被装%d)",
-            g_chkRes.total, g_chkRes.issuePersons,
-            g_chkRes.cardCount, g_chkRes.hrCount, g_chkRes.finCount, g_chkRes.uniCount);
-}
-
-/* 导出结果 CSV(UTF-8 BOM,Excel 可直接打开) */
-static void chk_export(void)
-{
-    if (g_chkRes.issueCount <= 0) {
-        msg_info(L"没有可导出的检查结果,请先执行检查。");
-        return;
-    }
-    wchar_t path[MAX_PATH] = L"联审结果.csv";
-    OPENFILENAMEW ofn;
-    memset(&ofn, 0, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = g_hMain;
-    ofn.lpstrFilter = L"CSV 文件 (*.csv)\0*.csv\0";
-    ofn.lpstrFile = path;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_OVERWRITEPROMPT;
-    ofn.lpstrDefExt = L"csv";
-    if (!GetSaveFileNameW(&ofn)) return;
-
-    FILE *f = _wfopen(path, L"wb");
-    if (!f) { msg_err(L"无法写入文件。"); return; }
-    fwrite("\xEF\xBB\xBF", 1, 3, f);
-    fwrite("\xe5\xba\x8f\xe5\x8f\xb7\x2c\xe7\xb1\xbb\xe5\x9e\x8b\x2c\xe5\xa7\x93\xe5\x90\x8d\x2c\xe8\xba\xab\xe4\xbb\xbd\xe8\xaf\x81\xe5\x8f\xb7\xe7\xa0\x81\x2c\xe9\x83\xa8\xe9\x97\xa8\x2c\xe6\x9d\xa5\xe6\xba\x90\x2c\xe8\xaf\xb4\xe6\x98\x8e\x0d\x0a", 1, 59, f);
-    for (int i = 0; i < g_chkRes.issueCount; i++) {
-        CheckIssue *it = &g_chkRes.issues[i];
-        char u8[256];
-        fprintf(f, "%d,", i + 1);
-        #define W(x) do { wcs_to_u8(it->x, u8, 255); fprintf(f, "%s,", u8); } while (0)
-        W(type); W(name); W(idcard); W(dept); W(source);
-        wcs_to_u8(it->desc, u8, 255);
-        fprintf(f, "%s\r\n", u8);
-        #undef W
-    }
-    fclose(f);
-    log_add(L"联审结果已导出:%d 条", g_chkRes.issueCount);
-    msg_info(L"导出完成。");
 }
 
 static void show_help(void)
@@ -1553,22 +1423,7 @@ static void switch_page(int page)
     ShowWindow(GetDlgItem(g_hMain, IDC_BTN_LOGCLEAR), page == 1 ? SW_SHOW : SW_HIDE);
     ShowWindow(GetDlgItem(g_hMain, IDC_CHK_AUTOSCROLL), page == 1 ? SW_SHOW : SW_HIDE);
 
-    /* 检查页 */
-    int chkCtrls = (page == 2);
-    {
-        static const int ids[] = { IDC_CHK_LB1, IDC_CHK_LB2, IDC_CHK_LB3, IDC_CHK_LB4,
-                                   IDC_CHK_E1, IDC_CHK_E2, IDC_CHK_E3, IDC_CHK_E4,
-                                   IDC_CHK_B1, IDC_CHK_B2, IDC_CHK_B3, IDC_CHK_B4,
-                                   IDC_CHK_RUN, IDC_CHK_EXPORT, IDC_CHK_ST };
-        for (int i = 0; i < 15; i++) {
-            HWND h = GetDlgItem(g_hMain, ids[i]);
-            if (h) ShowWindow(h, chkCtrls ? SW_SHOW : SW_HIDE);
-        }
-    }
-    ShowWindow(g_hRList, chkCtrls ? SW_SHOW : SW_HIDE);
-
     g_uiNavSel = (page == 0) ? g_hBtn[4] : g_hBtn[5];
-    if (page == 2) g_uiNavSel = GetDlgItem(g_hMain, IDC_NAV_CHECK);
     InvalidateRect(g_hBtn[4], NULL, TRUE);
     InvalidateRect(g_hBtn[5], NULL, TRUE);
 
@@ -1693,22 +1548,6 @@ static void layout_children(int cx, int cy)
     MoveWindow(GetDlgItem(g_hMain, IDC_BTN_LOGCLEAR), mx + 104, gy - 2, 96, 26, TRUE);
     MoveWindow(g_hLog, mx - 8, SET_TOP + 32, mw + 16, cy - (SET_TOP + 32) - 18, TRUE);
 
-    /* 检查页(四表联审) */
-    {
-        static const int lbIds[4] = { IDC_CHK_LB1, IDC_CHK_LB2, IDC_CHK_LB3, IDC_CHK_LB4 };
-        int y = SET_TOP;
-        for (int i = 0; i < 4; i++) {
-            MoveWindow(GetDlgItem(g_hMain, lbIds[i]), mx, y + 3, 56, 20, TRUE);
-            MoveWindow(GetDlgItem(g_hMain, IDC_CHK_E1 + i), mx + 62, y, 330, 22, TRUE);
-            MoveWindow(GetDlgItem(g_hMain, IDC_CHK_B1 + i), mx + 398, y, 64, 22, TRUE);
-            y += 28;
-        }
-        MoveWindow(GetDlgItem(g_hMain, IDC_CHK_RUN), mx, y + 4, 96, 28, TRUE);
-        MoveWindow(GetDlgItem(g_hMain, IDC_CHK_ST), mx + 110, y + 9, mw - 220, 20, TRUE);
-        MoveWindow(GetDlgItem(g_hMain, IDC_CHK_EXPORT), mx + mw - 96, y + 4, 96, 28, TRUE);
-        y += 40;
-        MoveWindow(g_hRList, mx - 8, y, mw + 16, cy - y - 12, TRUE);
-    }
 }
 
 /* 绘制左侧导航栏底色 + 主区白色圆角卡片 */
@@ -1903,12 +1742,6 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                            (NAV_W - NAV_BTN_W) / 2, 14, NAV_BTN_W, NAV_BTN_H, IDC_NAV_TASK);
             g_hBtn[5] = mk(L"BUTTON", L"日志", BS_OWNERDRAW,
                            (NAV_W - NAV_BTN_W) / 2, 14 + NAV_BTN_H + 6, NAV_BTN_W, NAV_BTN_H, IDC_NAV_LOG);
-            {
-                HWND nb = mk(L"BUTTON", L"检查", BS_OWNERDRAW,
-                             (NAV_W - NAV_BTN_W) / 2, 14 + (NAV_BTN_H + 6) * 2,
-                             NAV_BTN_W, NAV_BTN_H, IDC_NAV_CHECK);
-                (void)nb;
-            }
             g_uiNavSel = g_hBtn[4];
 
             struct { const wchar_t *txt; int id; } nav[] = {
@@ -1997,52 +1830,6 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             SendMessageW(clr, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
         }
 
-        /* ---- 检查页(四表联审) ---- */
-        {
-            static const int lbIds[4] = { IDC_CHK_LB1, IDC_CHK_LB2, IDC_CHK_LB3, IDC_CHK_LB4 };
-            for (int i = 0; i < 4; i++) {
-                wchar_t t[16];
-                _snwprintf(t, 15, kChkTabNames[i]);
-                t[15] = 0;
-                mk(L"STATIC", t, 0, 0, 0, 56, 20, lbIds[i]);
-                mk(L"EDIT", L"", WS_BORDER | ES_READONLY | ES_AUTOHSCROLL,
-                   0, 0, 330, 22, IDC_CHK_E1 + i);
-                mk(L"BUTTON", L"浏览…", BS_OWNERDRAW, 0, 0, 64, 22, IDC_CHK_B1 + i);
-            }
-            mk(L"BUTTON", L"开始检查", BS_OWNERDRAW, 0, 0, 96, 28, IDC_CHK_RUN);
-            mk(L"BUTTON", L"导出结果", BS_OWNERDRAW, 0, 0, 96, 28, IDC_CHK_EXPORT);
-            mk(L"STATIC", L"未检查", 0, 0, 0, 360, 20, IDC_CHK_ST);
-            /* 检查页控件默认隐藏(仅 page==2 显示);创建时可见会叠在任务页上 */
-            for (int k = 0; k < 4; k++) {
-                ShowWindow(GetDlgItem(hwnd, IDC_CHK_LB1 + k), SW_HIDE);
-                ShowWindow(GetDlgItem(hwnd, IDC_CHK_E1 + k), SW_HIDE);
-                ShowWindow(GetDlgItem(hwnd, IDC_CHK_B1 + k), SW_HIDE);
-            }
-            ShowWindow(GetDlgItem(hwnd, IDC_CHK_RUN), SW_HIDE);
-            ShowWindow(GetDlgItem(hwnd, IDC_CHK_EXPORT), SW_HIDE);
-            ShowWindow(GetDlgItem(hwnd, IDC_CHK_ST), SW_HIDE);
-            g_hRList = CreateWindowExW(0, WC_LISTVIEWW, L"",
-                                       WS_CHILD | LVS_REPORT | LVS_SHOWSELALWAYS |
-                                       LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES |
-                                       LVS_EX_DOUBLEBUFFER | WS_BORDER,
-                                       0, 0, 400, 200, hwnd,
-                                       (HMENU)(INT_PTR)IDC_RLIST,
-                                       GetModuleHandleW(NULL), NULL);
-            SendMessageW(g_hRList, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
-            struct { const wchar_t *name; int w; } rcols[] = {
-                { L"序号", 44 }, { L"类型", 58 }, { L"姓名", 66 }, { L"身份证号码", 140 },
-                { L"来源", 100 }, { L"说明", 320 },
-            };
-            LVCOLUMNW rc;
-            memset(&rc, 0, sizeof(rc));
-            rc.mask = LVCF_TEXT | LVCF_WIDTH;
-            for (int i = 0; i < 6; i++) {
-                rc.pszText = (LPWSTR)rcols[i].name;
-                rc.cx = rcols[i].w;
-                ListView_InsertColumn(g_hRList, i, &rc);
-            }
-            ShowWindow(g_hRList, SW_HIDE);       /* 默认在任务页 */
-        }
 
         /* ---- 步骤列表 ---- */
         g_hList = CreateWindowExW(0, WC_LISTVIEWW, L"",
@@ -2315,12 +2102,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         switch (id) {
         case IDC_NAV_TASK:  switch_page(0); return 0;
         case IDC_NAV_LOG:   switch_page(1); return 0;
-        case IDC_NAV_CHECK: switch_page(2); return 0;
-        case IDC_CHK_B1: case IDC_CHK_B2: case IDC_CHK_B3: case IDC_CHK_B4:
-            chk_pick_file(id - IDC_CHK_B1);
-            return 0;
-        case IDC_CHK_RUN:    chk_run(); return 0;
-        case IDC_CHK_EXPORT: chk_export(); return 0;
+        case IDC_BTN_CHECKER: open_checker_tool(); return 0;
         case IDC_BTN_LOGCLEAR:
             SetWindowTextW(g_hLog, L"");
             log_add(L"日志已清空");

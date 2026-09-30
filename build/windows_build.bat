@@ -27,7 +27,7 @@ echo [1/2] windres ...
 if errorlevel 1 goto :err
 
 echo [2/2] gcc ...
-%GCC% -std=c99 -O2 -Wall -municode -mwindows -DUNICODE -D_UNICODE -Isrc/core -Isrc/win -Wl,--subsystem,windows:5.01 -Wl,--major-os-version=5 -Wl,--minor-os-version=1 -static -o dist\BaoZhangKaTool.exe src\core\u8.c src\core\inflate.c src\core\zip.c src\core\sheet.c src\core\engine.c src\core\ac_keys.c src\core\import.c src\core\checker.c src\win\platform_win.c src\win\picker.c src\win\dlg_edit.c src\win\gui.c build\app_res.o -lcomctl32 -lcomdlg32 -lgdi32 -luser32 -lshell32 -limm32
+%GCC% -std=c99 -O2 -Wall -municode -mwindows -DUNICODE -D_UNICODE -Isrc/core -Isrc/win -Wl,--subsystem,windows:5.01 -Wl,--major-os-version=5 -Wl,--minor-os-version=1 -static -o dist\BaoZhangKaTool.exe src\core\u8.c src\core\inflate.c src\core\zip.c src\core\sheet.c src\core\engine.c src\core\ac_keys.c src\core\import.c src\win\platform_win.c src\win\picker.c src\win\dlg_edit.c src\win\gui.c build\app_res.o -lcomctl32 -lcomdlg32 -lgdi32 -luser32 -lshell32 -limm32
 if errorlevel 1 goto :err
 
 echo.
