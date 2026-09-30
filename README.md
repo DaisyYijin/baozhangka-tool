@@ -85,6 +85,10 @@ sudo pacman -S gtk3 libxtst
 
 > **Wayland 用户**:输入模拟依赖 X11(XTest)。请在登录界面选"Ubuntu on X11"之类会话运行。
 
+> **Windows 版与 Linux 版功能差异**:多步骤 TAB、跨 TAB 跳转、TAB 重命名、Excel 数据列选择、
+> 悬浮窗、屏幕取点标记等完整功能目前仅在 Windows 版提供;Linux 版为基础版
+> (单任务列表 + 全部动作类型 + Excel 导入 + 热键)。
+
 ### 🍎 macOS
 
 暂无原生版本。Mac 用户可在虚拟机 / Parallels 中运行 Windows 版。

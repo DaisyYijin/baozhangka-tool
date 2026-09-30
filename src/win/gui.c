@@ -1378,28 +1378,55 @@ static int cz_cb(const char *name, void *ud)
     return 0;
 }
 
-/* exe 旁有 checker zip 时自动解压;返回解压文件数 */
+/* exe 旁有 checker zip 时自动解压(先解压到临时目录,全部成功后替换,
+   避免中途失败留下半套目录);返回解压文件数,失败返回 0 */
 static int checker_try_extract(const wchar_t *dir)
 {
     static const wchar_t *zips[] = { L"baozhangka-checker-web.zip",
                                      L"保障卡综合检查工具.zip" };
-    wchar_t zp[MAX_PATH + 32];
+    wchar_t zp[MAX_PATH + 32], tmp[MAX_PATH + 40];
     for (int i = 0; i < 2; i++) {
         _snwprintf(zp, MAX_PATH + 31, L"%ls%ls", dir, zips[i]);
         zp[MAX_PATH + 31] = 0;
         size_t len = 0;
         unsigned char *data = read_file_all(zp, &len);
         if (!data) continue;
+        _snwprintf(tmp, MAX_PATH + 39, L"%lsac_extract_tmp", dir);
+        tmp[MAX_PATH + 39] = 0;
+        SHCreateDirectoryExW(NULL, tmp, NULL);
         g_czData = data;
         g_czSize = len;
-        g_czRoot = dir;
+        g_czRoot = tmp;
         g_czFiles = 0;
         zip_list(data, len, cz_cb, NULL);
         free(data);
         if (g_czFiles > 0) {
-            log_add(L"综合检查工具:已从 %ls 解压 %d 个文件", zips[i], g_czFiles);
-            return g_czFiles;
+            wchar_t dst[MAX_PATH + 40];
+            _snwprintf(dst, MAX_PATH + 39, L"%ls保障卡综合检查工具", dir);
+            dst[MAX_PATH + 39] = 0;
+            wchar_t from[MAX_PATH + 56];
+            _snwprintf(from, MAX_PATH + 55, L"%ls\\保障卡综合检查工具", tmp);
+            from[MAX_PATH + 55] = 0;
+            /* 旧目录(可能不完整)删除后用完整版替换 */
+            SHFILEOPSTRUCTW op;
+            memset(&op, 0, sizeof(op));
+            op.wFunc = FO_DELETE;
+            op.pFrom = dst;
+            op.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
+            SHFileOperationW(&op);
+            if (MoveFileW(from, dst)) {
+                RemoveDirectoryW(tmp);
+                log_add(L"综合检查工具:已从 %ls 解压 %d 个文件", zips[i], g_czFiles);
+                return g_czFiles;
+            }
         }
+        /* 失败清理临时目录 */
+        SHFILEOPSTRUCTW cl;
+        memset(&cl, 0, sizeof(cl));
+        cl.wFunc = FO_DELETE;
+        cl.pFrom = tmp;
+        cl.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
+        SHFileOperationW(&cl);
     }
     return 0;
 }
@@ -1423,8 +1450,8 @@ static void open_checker_tool(void)
     } else {
         msg_info(L"未找到综合检查工具。\n\n"
                  L"请从 GitHub Release 下载 baozhangka-checker-web.zip,\n"
-                 L"解压到本程序所在目录(与 exe 同级),使存在:\n"
-                 L"  保障卡综合检查工具\\主程序.html");
+                 L"直接放到本程序所在目录(无需手动解压,程序会自动解压),\n"
+                 L"再次点击「综合检查」即可打开。");
     }
 }
 
@@ -1519,9 +1546,15 @@ static void autosave_path(void)
     wcscat(g_autosavePath, L"last_task.csv");
 }
 
-/* 任务有变更时自动保存到程序目录 last_task.csv */
+/* 任务有变更时自动保存到程序目录 last_task.csv(500ms 防抖合并连续变更) */
 static void autosave(void)
 {
+    SetTimer(g_hMain, 7, 500, NULL);
+}
+
+static void autosave_flush(void)
+{
+    KillTimer(g_hMain, 7);
     autosave_path();
     g_taskbook.count = g_tabCount;   /* 随文件持久化,重启恢复TAB数 */
     size_t len = 0;
@@ -1788,6 +1821,22 @@ static void list_begin_drag(NM_LISTVIEW *nmlv)
 
     if (dst >= 0 && dst != src && dst != src + 1) {
         task_move_to(&g_task, src, dst);
+        /* 同步本任务内其它跳转步骤的目标序号(步骤从 src 移到 final) */
+        {
+            int final = dst > src ? dst - 1 : dst;
+            for (int k = 0; k < g_task.count; k++) {
+                Step *j = &g_task.steps[k];
+                if (j->type != ACT_JUMP || (j->jumpTab >= 2) || j->jumpTo < 1) continue;
+                int t = j->jumpTo - 1;                  /* 0-based 目标 */
+                if (k != final) {                        /* 跳转步骤自身不动引用 */
+                    if (src < final) {                   /* 向后移:区间内目标前移1 */
+                        if (t > src && t <= final) j->jumpTo--;
+                    } else {                             /* 向前移:区间内目标后移1 */
+                        if (t >= final && t < src) j->jumpTo++;
+                    }
+                }
+            }
+        }
         int final = dst > src ? dst - 1 : dst;
         refresh_list();
         ListView_SetItemState(g_hList, final,
@@ -1951,7 +2000,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     case WM_GETMINMAXINFO: {
         MINMAXINFO *mmi = (MINMAXINFO *)lp;
-        mmi->ptMinTrackSize.x = 860;   /* 保证侧栏与主区完整 */
+        mmi->ptMinTrackSize.x = 950;   /* 保证侧栏+设置行(悬浮窗按钮右缘910)完整 */
         mmi->ptMinTrackSize.y = 640;
         return 0;
     }
@@ -2044,6 +2093,10 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
 
     case WM_TIMER:
+        if (wp == 7) {                  /* 防抖到点:真正写盘 */
+            autosave_flush();
+            return 0;
+        }
         if (wp == 3 && !g_uiDlgActive) {     /* 悬停轮询(对话框打开时让位) */
             POINT pt;
             GetCursorPos(&pt);
@@ -2313,9 +2366,10 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
 
     case WM_DESTROY:
+        for (int i = 0; i < MAX_TASKS; i++) task_free(&g_taskbook.tasks[i]);
         UnregisterHotKey(hwnd, HOTK_STOP);
         UnregisterHotKey(hwnd, HOTK_START);
-        autosave();                      /* 退出前再保存一次 */
+        autosave_flush();                /* 退出前立即保存(取消防抖定时) */
         g_stop_flag = 1;
         PostQuitMessage(0);
         return 0;

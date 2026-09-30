@@ -417,14 +417,13 @@ static void on_command(WPARAM wp)
         }
         break;
     }
-    case IDC_IMPSHEET: {                     /* 换工作表:列名刷新并重绑 */
+    case IDC_IMPSHEET: {                     /* 换工作表:列重置为默认并重绑 */
         if (HIWORD(wp) == CBN_SELCHANGE) {
             int sel = (int)SendMessageW(g_edit.ctl[IDC_IMPSHEET - 100],
                                         CB_GETCURSEL, 0, 0);
-            int col = (int)SendMessageW(g_edit.ctl[IDC_IMPCOL - 100],
-                                        CB_GETCURSEL, 0, 0);
             if (sel >= 0) {
-                gui_rebind_excel(sel, col > 0 ? col : 0);
+                /* 旧列选择对新表可能越界,统一重置为默认(首列表头) */
+                gui_rebind_excel(sel, 1);
                 fill_imp_controls(sel, gui_excel_cur_col());
             }
         }

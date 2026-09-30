@@ -264,8 +264,10 @@ int engine_run(TaskBook *tb, int startTab, const Platform *p,
     }
 
     int loop = 0;
+    int jumps = 0;                       /* 单轮跳转计数(防互相指向死循环) */
     for (;;) {
         loop++;
+        jumps = 0;
         cur = base;                      /* 每轮从启动任务第1步开始 */
         for (int i = 0; i < cur->count; i++) {
             Step *s = &cur->steps[i];
@@ -312,7 +314,9 @@ int engine_run(TaskBook *tb, int startTab, const Platform *p,
                 break;
             case ACT_JUMP:
                 /* 跳转到第N步(N为界面序号):i 置为 N-2,经 for 的 i++ 后
-                   落在 0-based N-1。跨TAB时同时切换执行任务。 */
+                   落在 0-based N-1。跨TAB时同时切换执行任务。
+                   单轮跳转超上限视为循环配置错误,停止本轮(整体结束)。 */
+                if (++jumps > 10000) return ENGINE_DONE;
                 if (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS &&
                     tb->tasks[s->jumpTab - 1].count > 0 &&
                     s->jumpTo >= 1 && s->jumpTo <= tb->tasks[s->jumpTab - 1].count) {
