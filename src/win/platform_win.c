@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include "ac_defs.h"
+#include "platform_win.h"
 #include "ac_keys.h"
 #include "engine.h"
 #include "u8.h"
@@ -363,6 +364,7 @@ Platform *win_platform(void)
         p.rand         = win_rand;
         p.get_pixel    = win_get_pixel;
         p.find_window  = win_find_window;
+        p.ocr_region   = win_ocr_region;
         p.stop         = &g_stop_flag;
         inited = 1;
         ac_srand((uint32_t)GetTickCount() ^ (uint32_t)(ptrdiff_t)&g_stop_flag);

@@ -159,16 +159,19 @@ static void place(int id, int x, int y, int w, int h)
 static void layout_rows(int type)
 {
     int isClick = (type == ACT_CLICK || type == ACT_DBLCLICK || type == ACT_MULTI ||
-                   type == ACT_RCLICK || type == ACT_MCLICK);
+                   type == ACT_RCLICK || type == ACT_MCLICK || type == ACT_CHECK ||
+                   type == ACT_OCR);
     int scroll  = (type == ACT_SCROLL);
     int drag    = (type == ACT_DRAG);
-    int text    = (type == ACT_TEXT || type == ACT_KEY);
+    int text    = (type == ACT_TEXT || type == ACT_KEY || type == ACT_WAITWIN ||
+                   type == ACT_OCR);
     int y = TOP_Y;
 
     /* 行:坐标 / 滚动位置 / 起点 */
     if (isClick || scroll || drag) {
         set_ctl_text(IDC_LB_XY,
-                     drag ? L"起点 X / Y" : scroll ? L"滚动位置" : L"坐标 X / Y");
+                     drag ? L"起点 X / Y" : scroll ? L"滚动位置" :
+                     type == ACT_OCR ? L"区域起点 X / Y" : L"坐标 X / Y");
         show_ctl(IDC_LB_XY, 1);
         show_ctl(IDC_X, 1);
         show_ctl(IDC_Y, 1);
@@ -209,7 +212,8 @@ static void layout_rows(int type)
     if (text) {
         set_ctl_text(IDC_LB_TEXT,
                      type == ACT_TEXT ? L"输入内容" :
-                     type == ACT_WAITWIN ? L"窗口标题包含" : L"按键组合");
+                     type == ACT_WAITWIN ? L"窗口标题包含" :
+                     type == ACT_OCR ? L"包含关键词(空=只记录)" : L"按键组合");
         show_ctl(IDC_LB_TEXT, 1);
         show_ctl(IDC_TEXT, 1);
         place(IDC_LB_TEXT, LB_X, y + 2, LB_W, 20);
@@ -256,15 +260,16 @@ static void layout_rows(int type)
         show_ctl(IDC_SCROLL, 0);
     }
 
-    /* 行:判断区域宽高(0=单点;取色拖框自动填) */
-    if (type == ACT_CHECK) {
+    /* 行:判断/识别区域宽高(0=单点/默认;拖框自动填) */
+    if (type == ACT_CHECK || type == ACT_OCR) {
         show_ctl(IDC_LB_W, 1);
         show_ctl(IDC_W, 1);
         show_ctl(IDC_H, 1);
         place(IDC_LB_W, LB_X, y + 2, LB_W, 20);
         place(IDC_W, CT_X, y, 56, 22);
         place(IDC_H, CT_X + 64, y, 56, 22);
-        set_ctl_text(IDC_LB_W, L"区域W/H(0单点)");
+        set_ctl_text(IDC_LB_W,
+                     type == ACT_OCR ? L"区域W/H(0=300x80)" : L"区域W/H(0单点)");
         y += ROW_H;
     } else {
         show_ctl(IDC_LB_W, 0);
@@ -284,10 +289,11 @@ static void layout_rows(int type)
         y += ROW_H;
     }
     /* 行:跳转/调用/判断满足时目标 */
-    if (type == ACT_JUMP || type == ACT_CALL || type == ACT_CHECK) {
+    if (type == ACT_JUMP || type == ACT_CALL || type == ACT_CHECK || type == ACT_OCR) {
         set_ctl_text(IDC_LB_JUMP,
                      type == ACT_CALL ? L"调用目标" :
-                     type == ACT_CHECK ? L"满足则跳转" : L"跳转目标");
+                     type == ACT_CHECK ? L"满足则跳转" :
+                     type == ACT_OCR ? L"含关键词跳转" : L"跳转目标");
         show_ctl(IDC_LB_JUMP, 1);
         show_ctl(IDC_JUMP, 1);
         show_ctl(IDC_JUMPTAB, 1);
@@ -647,7 +653,7 @@ static void build_controls(void)
  * ============================================================ */
 
 #define TP_W   532
-#define TP_CH  478
+#define TP_CH  556
 #define TP_CARD_W  160
 #define TP_CARD_H  66
 #define TP_GAP     12
@@ -685,8 +691,9 @@ static const struct {
     { ACT_WAITWIN,  L"等窗口", L"等待窗口出现再继续" },
     { ACT_CHECK,    L"判断",   L"屏幕颜色判断分支" },
     { ACT_CALL,     L"调用",   L"执行另一TAB后返回" },
+    { ACT_OCR,      L"读文本", L"区域识别文字并判断" },
 };
-#define TP_COUNT 14
+#define TP_COUNT 15
 
 /* GDI 绘制类型小图标(36x36,QQ 蓝) */
 static void draw_type_icon(HDC dc, int x, int y, int type)
@@ -781,6 +788,19 @@ static void draw_type_icon(HDC dc, int x, int y, int type)
         Polygon(dc, tri, 3);
         SelectObject(dc, obb);
         DeleteObject(br);
+        break;
+    }
+    case ACT_OCR: {
+        /* 读文本:文档形+扫描线 */
+        Rectangle(dc, x + 5, y + 4, x + 27, y + 32);
+        MoveToEx(dc, x + 10, y + 11, NULL); LineTo(dc, x + 22, y + 11);
+        MoveToEx(dc, x + 10, y + 16, NULL); LineTo(dc, x + 22, y + 16);
+        MoveToEx(dc, x + 10, y + 21, NULL); LineTo(dc, x + 18, y + 21);
+        HPEN sp = CreatePen(PS_SOLID, 2, col);
+        SelectObject(dc, sp);
+        MoveToEx(dc, x + 2, y + 27, NULL); LineTo(dc, x + 32, y + 27);
+        SelectObject(dc, pen);
+        DeleteObject(sp);
         break;
     }
     case ACT_WAITWIN: {

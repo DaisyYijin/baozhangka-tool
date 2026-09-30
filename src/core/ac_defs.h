@@ -33,6 +33,7 @@ enum {
     ACT_WAITWIN,     /* 等待窗口出现(标题包含 text,超时=前延时) */
     ACT_CHECK,       /* 判断 (x,y) 颜色:满足→跳转(jumpTo/jumpTab),否则继续 */
     ACT_CALL,        /* 子流程调用:执行目标TAB后返回调用处下一步 */
+    ACT_OCR,         /* 读文本:区域识别(ocr_region 钩子);含关键词则跳转 */
     ACT_TYPE_COUNT_
 };
 
@@ -90,6 +91,8 @@ typedef struct {
     uint32_t     (*rand)(void);                   /* 随机数 */
     int          (*get_pixel)(int x, int y);      /* 屏幕取色 0xRRGGBB,失败 -1;NULL=不支持 */
     int          (*find_window)(const wchar_t *titleContains); /* 标题包含返回1;NULL=不支持(视为1) */
+    int          (*ocr_region)(int x, int y, int w, int h,     /* 区域文本识别;返回1=out 为识别文本,0=失败;NULL=不支持 */
+                               wchar_t *out, int cap);
     volatile int *stop;                           /* 停止标志(非0=请求停止) */
 } Platform;
 

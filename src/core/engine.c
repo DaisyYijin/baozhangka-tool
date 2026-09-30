@@ -29,6 +29,7 @@ static const struct { const wchar_t *cn; const wchar_t *en; } ACT_NAMES[] = {
     { L"等窗口", L"waitwin" },
     { L"判断",   L"check" },
     { L"调用",   L"call" },
+    { L"读文本", L"ocr" },
 };
 
 const wchar_t *act_type_name(int type)
@@ -394,6 +395,27 @@ continue_loop:
                     i = s->jumpTo - 2;
                 }
                 break;
+            case ACT_OCR: {
+                /* 读文本:识别 (x,y,w,h) 区域;text 为关键词时,
+                   识别结果包含关键词→按 jumpTo/jumpTab 跳转,否则继续 */
+                wchar_t got[512];
+                if (p->ocr_region && p->ocr_region(s->x, s->y,
+                        s->w > 0 ? s->w : 300, s->h > 0 ? s->h : 80,
+                        got, 512)) {
+                    if (s->text[0] && wcsstr(got, s->text) != NULL) {
+                        if (++jumps > 10000) return ENGINE_DONE;
+                        if (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS &&
+                            tb->tasks[s->jumpTab - 1].count > 0 &&
+                            s->jumpTo >= 1 && s->jumpTo <= tb->tasks[s->jumpTab - 1].count) {
+                            cur = &tb->tasks[s->jumpTab - 1];
+                            i = s->jumpTo - 2;
+                        } else if (s->jumpTo >= 1 && s->jumpTo <= cur->count) {
+                            i = s->jumpTo - 2;
+                        }
+                    }
+                }
+                break;
+            }
             case ACT_WAITWIN: {
                 /* 等待标题包含指定文本的窗口;超时=前延时(默认30s) */
                 int timeout = s->delayBefore > 0 ? s->delayBefore : 30000;

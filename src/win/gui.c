@@ -221,7 +221,7 @@ void draw_accent_button(DRAWITEMSTRUCT *dis, COLORREF normal, COLORREF hot, COLO
 
 /* ================= 运行日志 ================= */
 
-static void log_add(const wchar_t *fmt, ...)
+void log_add(const wchar_t *fmt, ...)
 {
     wchar_t body[460], line[512];
     va_list ap;
@@ -320,6 +320,10 @@ static void step_desc(const Step *s, wchar_t *buf, int cap)
     case ACT_CHECK:
         _snwprintf(buf, cap - 1, L"判断(%d,%d)色%06X 满足跳第%d步",
                    s->x, s->y, s->ifColor & 0xFFFFFF, s->jumpTo);
+        break;
+    case ACT_OCR:
+        _snwprintf(buf, cap - 1, L"识别(%d,%d %dx%d)含[%ls]则跳第%d步",
+                   s->x, s->y, s->w, s->h, s->text, s->jumpTo);
         break;
     case ACT_CALL:
         _snwprintf(buf, cap - 1, L"调用%ls第%d步后返回",
@@ -804,6 +808,15 @@ static void refresh_list(void)
                            (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
                                ? gui_tab_display_name(s->jumpTab - 1) : L"本任务",
                            s->jumpTo);
+            break;
+        case ACT_OCR:
+            _snwprintf(buf, 63, L"区域(%d,%d)+%dx%d 含[%ls]?→%ls第%d步",
+                       s->x, s->y,
+                       s->w > 0 ? s->w : 300, s->h > 0 ? s->h : 80,
+                       s->text,
+                       (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
+                           ? gui_tab_display_name(s->jumpTab - 1) : L"本任务",
+                       s->jumpTo);
             break;
         case ACT_CALL:
             _snwprintf(buf, 63, L"调用 %ls 第%d步(完返回)",

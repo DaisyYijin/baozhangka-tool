@@ -45,6 +45,9 @@ int gui_excel_col_count(void);
 const char *gui_excel_col_name(int idx);     /* UTF-8;越界返回 "" */
 int gui_excel_cur_col(void);
 
+/* 运行日志(platform_win 的 OCR 识别结果记录用) */
+void log_add(const wchar_t *fmt, ...);
+
 /* TAB 显示名(无自定义名时为 步骤N);idx 从 0 起 */
 const wchar_t *gui_tab_display_name(int idx);
 int gui_tab_count(void);   /* 当前实际TAB数(1~8) */

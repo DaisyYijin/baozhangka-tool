@@ -27,6 +27,15 @@ static void paste_cb(const wchar_t *t) {
 static void slp(int ms) { (void)ms; }
 static uint32_t rnd(void) { return 0; }
 static int mock_pixel(int x, int y) { (void)x; (void)y; return g_pixVal; }
+static wchar_t g_ocrMock[128];
+static int mock_ocr(int x, int y, int w, int h, wchar_t *out, int cap)
+{
+    (void)x; (void)y; (void)w; (void)h;
+    wcsncpy(out, g_ocrMock, cap - 1);
+    out[cap - 1] = 0;
+    return out[0] != 0;
+}
+
 static int area_mock_pixel(int x, int y)          /* 仅 (57,63)=红,其余黑 */
 {
     return (x == 57 && y == 63) ? 0xFF0000 : 0x000000;
@@ -43,6 +52,7 @@ static Platform mkp(void)
     p.mouse_scroll = ns; p.key_combo = nc; p.text_paste = paste_cb;
     p.sleep_ms = slp; p.rand = rnd;
     p.get_pixel = mock_pixel;
+    p.ocr_region = mock_ocr;
     p.find_window = mock_findwin;
     p.stop = &g_stop;
     return p;
@@ -213,6 +223,32 @@ int main(void)
         g_n = 0;
         engine_run(&tb, 0, &p, NULL, NULL);
         CHECK(g_n == 1 && g_clicks[0] == 41, "窗口存在应立即通过");
+
+        task_clear(A);
+    }
+
+    /* ============ 5) 读文本(mock OCR) ============ */
+    {
+        Task *A = &tb.tasks[0];
+        A->loops = 1;
+        Step o1; memset(&o1, 0, sizeof(o1)); o1.type = ACT_CLICK; o1.x = 61;
+        Step o2; memset(&o2, 0, sizeof(o2));
+        o2.type = ACT_OCR; o2.x = 0; o2.y = 0; o2.w = 100; o2.h = 30;
+        wcscpy(o2.text, L"成功"); o2.jumpTo = 4;      /* 含"成功"→第4步 */
+        Step o3; memset(&o3, 0, sizeof(o3)); o3.type = ACT_CLICK; o3.x = 62;
+        Step o4; memset(&o4, 0, sizeof(o4)); o4.type = ACT_CLICK; o4.x = 63;
+        task_add(A, &o1); task_add(A, &o2); task_add(A, &o3); task_add(A, &o4);
+
+        wcscpy(g_ocrMock, L"操作成功完成");
+        g_n = 0;
+        engine_run(&tb, 0, &p, NULL, NULL);
+        CHECK(g_n == 2 && g_clicks[0] == 61 && g_clicks[1] == 63,
+              "OCR含关键词应跳到第4步");
+
+        wcscpy(g_ocrMock, L"操作失败");
+        g_n = 0;
+        engine_run(&tb, 0, &p, NULL, NULL);
+        CHECK(g_n == 3, "OCR不含关键词应顺序执行");
 
         task_clear(A);
     }

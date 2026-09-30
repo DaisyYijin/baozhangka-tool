@@ -322,7 +322,7 @@ int task_import_sheet(Task *t, const Sheet *s, int append)
             st.jumpTo = jt;
             st.jumpTab = jtab;
         }
-        if (type == ACT_CHECK) {
+        if (type == ACT_CHECK || type == ACT_OCR) {
             st.ifColor = cell_int(s, r, map[COL_COUNT] >= 0 ? map[COL_COUNT] : 3, 0);
             st.ifTol = cell_int(s, r, map[COL_INTERVAL] >= 0 ? map[COL_INTERVAL] : 4, 10);
             /* 文本列可带区域 "WxH"(取色拖框保存) */
@@ -471,6 +471,8 @@ char *task_export_csv2(const Task *t, size_t *outLen,
             wchar_t tmp[64];
             AC_SWPRINTF(tmp, 64, L"%d,%d", s->x2, s->y2);
             append_field(&buf, &len, &cap, tmp);
+        } else if (s->type == ACT_OCR) {
+            append_field(&buf, &len, &cap, s->text);          /* OCR:关键词 */
         } else if (s->type == ACT_CHECK && (s->w > 0 || s->h > 0)) {
             wchar_t tmp[32];
             AC_SWPRINTF(tmp, 32, L"%dx%d", s->w, s->h);
@@ -739,7 +741,9 @@ char *taskbook_export_csv2(const TaskBook *tb, size_t *outLen,
             bk_field_n(&buf, &len, &cap,
                        s->type == ACT_CHECK ? s->ifTol : s->interval);
             bk_sep(&buf, &len, &cap);
-            if (s->type == ACT_CHECK && (s->w > 0 || s->h > 0)) {
+            if (s->type == ACT_OCR) {
+                bk_field_w(&buf, &len, &cap, s->text);
+            } else if (s->type == ACT_CHECK && (s->w > 0 || s->h > 0)) {
                 wchar_t jt[32];
                 AC_SWPRINTF(jt, 32, L"%dx%d", s->w, s->h);
                 bk_field_w(&buf, &len, &cap, jt);
