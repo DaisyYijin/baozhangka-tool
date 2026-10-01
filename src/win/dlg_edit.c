@@ -158,6 +158,25 @@ static void place(int id, int x, int y, int w, int h)
 
 static void layout_rows(int type)
 {
+    /* 先隐藏全部可选控件,再按类型显示,杜绝残留控件叠在当前布局上 */
+    {
+        static const int allIds[] = {
+            IDC_LB_XY, IDC_X, IDC_Y, IDC_PICKXY,
+            IDC_LB_COUNT, IDC_COUNT, IDC_INTERVAL,
+            IDC_LB_TEXT, IDC_TEXT, IDC_BTN_IMPEXCEL, IDC_IMPSHEET, IDC_IMPCOL,
+            IDC_CLEAR,
+            IDC_LB_SCROLL, IDC_SCROLL,
+            IDC_LB_W, IDC_W, IDC_H,
+            IDC_LB_JUMP, IDC_JUMP, IDC_JUMPTAB,
+            IDC_LB_XY2, IDC_X2, IDC_Y2, IDC_PICKXY2,
+            IDC_LB_DELAY, IDC_DELAYB, IDC_DELAYA,
+            IDC_LB_NOTE, IDC_NOTE,
+        };
+        for (int i = 0; i < (int)(sizeof(allIds) / sizeof(allIds[0])); i++) {
+            HWND h = g_edit.ctl[CTL_ID_OF(allIds[i])];
+            if (h) ShowWindow(h, SW_HIDE);
+        }
+    }
     int isClick = (type == ACT_CLICK || type == ACT_DBLCLICK || type == ACT_MULTI ||
                    type == ACT_RCLICK || type == ACT_MCLICK || type == ACT_CHECK ||
                    type == ACT_OCR);
@@ -268,8 +287,7 @@ static void layout_rows(int type)
         place(IDC_LB_W, LB_X, y + 2, LB_W, 20);
         place(IDC_W, CT_X, y, 56, 22);
         place(IDC_H, CT_X + 64, y, 56, 22);
-        set_ctl_text(IDC_LB_W,
-                     type == ACT_OCR ? L"区域W/H(0=300x80)" : L"区域W/H(0单点)");
+        set_ctl_text(IDC_LB_W, L"区域 W / H");
         y += ROW_H;
     } else {
         show_ctl(IDC_LB_W, 0);
@@ -615,6 +633,9 @@ static void build_controls(void)
     CTL(L"BUTTON", L"导入Excel数据", BS_OWNERDRAW, IDC_BTN_IMPEXCEL, 108, 24);
     CTL(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, IDC_IMPSHEET, 148, 160);
     CTL(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, IDC_IMPCOL, 148, 160);
+    /* 数据源下拉创建时隐藏(仅输入步骤显示,避免叠在其他控件上) */
+    ShowWindow(g_edit.ctl[IDC_IMPSHEET - 100], SW_HIDE);
+    ShowWindow(g_edit.ctl[IDC_IMPCOL - 100], SW_HIDE);
 
     /* 清空复选 */
     CTL(L"BUTTON", L"输入前清空原内容(Ctrl+A 后删除)", BS_AUTOCHECKBOX, IDC_CLEAR, 248, 20);
