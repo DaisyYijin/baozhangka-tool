@@ -17,7 +17,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#define DLG_CW 420           /* 客户区宽(固定) */
+#define DLG_CW 448           /* 客户区宽(固定) */
 
 enum {
     IDC_TYPE = 100, IDC_X, IDC_Y, IDC_W, IDC_H, IDC_COUNT, IDC_INTERVAL,
@@ -32,8 +32,8 @@ enum {
 
 /* 行几何:标签右对齐列 + 控件列 */
 #define LB_X    12
-#define LB_W    86
-#define CT_X    104
+#define LB_W    110
+#define CT_X    128
 #define ROW_H   33
 #define TOP_Y   12
 
@@ -232,7 +232,7 @@ static void layout_rows(int type)
         set_ctl_text(IDC_LB_TEXT,
                      type == ACT_TEXT ? L"输入内容" :
                      type == ACT_WAITWIN ? L"窗口标题包含" :
-                     type == ACT_OCR ? L"包含关键词(空=只记录)" : L"按键组合");
+                     type == ACT_OCR ? L"关键词" : L"按键组合");
         show_ctl(IDC_LB_TEXT, 1);
         show_ctl(IDC_TEXT, 1);
         place(IDC_LB_TEXT, LB_X, y + 2, LB_W, 20);
@@ -241,7 +241,7 @@ static void layout_rows(int type)
         show_ctl(IDC_IMPSHEET, type == ACT_TEXT);
         show_ctl(IDC_IMPCOL, type == ACT_TEXT);
         if (type == ACT_TEXT) {
-            place(IDC_BTN_IMPEXCEL, CT_X + 206, y - 1, 108, 24);
+            place(IDC_BTN_IMPEXCEL, CT_X + 196, y - 1, 108, 24);
             y += 26;
             /* 数据源行:工作表下拉 + 数据列下拉(列名=表头名) */
             place(IDC_IMPSHEET, CT_X, y, 148, 22);
