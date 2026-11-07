@@ -17,7 +17,7 @@ pkg-config --exists x11 xtst || {
     exit 1
 }
 
-CFLAGS="-std=c99 -O2 -Wall -Isrc/core -Isrc/linux $(pkg-config --cflags x11 xtst)"
+CFLAGS="-std=gnu99 -O2 -Wall -Isrc/core -Isrc/linux $(pkg-config --cflags x11 xtst)"
 LIBS="$(pkg-config --libs x11 xtst) -lm -lpthread"
 
 mkdir -p dist
