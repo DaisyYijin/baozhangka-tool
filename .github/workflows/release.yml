@@ -109,8 +109,9 @@ jobs:
           mkdir -p dist-out
           docker run --rm -v "${{ github.workspace }}:/repo" debian:buster bash -c "
             set -e
+            printf 'deb http://archive.debian.org/debian buster main\ndeb http://archive.debian.org/debian-security buster/updates main\n' > /etc/apt/sources.list
             cp -r /repo /src && cd /src
-            apt-get update -qq
+            apt-get -o Acquire::Check-Valid-Until=false update -qq
             apt-get install -y -qq gcc pkg-config file binutils libx11-dev libxtst-dev
             sh build/linux_build.sh
             file dist/baozhangka-tool
@@ -135,8 +136,9 @@ jobs:
           mkdir -p dist-out
           docker run --rm -v "${{ github.workspace }}:/repo" debian:buster bash -c "
             set -e
+            printf 'deb http://archive.debian.org/debian buster main\ndeb http://archive.debian.org/debian-security buster/updates main\n' > /etc/apt/sources.list
             cp -r /repo /src && cd /src
-            apt-get update -qq
+            apt-get -o Acquire::Check-Valid-Until=false update -qq
             apt-get install -y -qq gcc pkg-config file binutils libx11-dev libxtst-dev
             sh build/linux_build.sh
             file dist/baozhangka-tool
