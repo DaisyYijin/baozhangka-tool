@@ -1304,6 +1304,7 @@ const char *gui_excel_sheet_name(int idx)
 int gui_excel_cur_sheet(void) { return g_bindSheet; }
 int gui_excel_cur_col(void)   { return g_bindCol; }
 
+int gui_excel_bound(void) { return g_bindPath[0] ? 1 : 0; }
 int gui_excel_col_count(void)
 {
     return g_bindColN;

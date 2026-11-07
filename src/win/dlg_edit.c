@@ -664,8 +664,21 @@ static int collect(void)
     get_ctl_text(IDC_NOTE, s->note, AC_NOTE_MAX - 1);
 
     if (s->type == ACT_TEXT && !s->text[0]) {
-        MessageBoxW(g_edit.hwnd, L"请填写输入内容。", L"提示", MB_ICONINFORMATION);
-        return 0;
+        if (gui_excel_bound()) {
+            /* 已绑定数据源:空文本自动引用所选列,不阻止保存 */
+            wcscpy(s->text, L"{行}");     /* {行} */
+            MessageBoxW(g_edit.hwnd,
+                L"输入内容为空,已自动填入 {行}(执行时取当轮所选列内容)。\n"
+                L"如需引用其他列,可改写为 {列名} 或 {列N},如 账号:{账号}。",
+                L"提示", MB_ICONINFORMATION);
+        } else {
+            MessageBoxW(g_edit.hwnd,
+                L"请填写输入内容。\n\n"
+                L"提示:先点「导入Excel数据」(或直接拖入 Excel 文件)绑定数据源,\n"
+                L"绑定后可留空(自动取所选列),或用 {行}/{列名} 引用数据,如 账号:{账号}。",
+                L"提示", MB_ICONINFORMATION);
+            return 0;
+        }
     }
     if (s->type == ACT_XLSIF && !s->text[0]) {
         MessageBoxW(g_edit.hwnd, L"请填写条件,如:男=>3,女=>18",

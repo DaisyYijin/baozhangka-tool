@@ -44,6 +44,8 @@ const char *gui_excel_sheet_name(int idx);   /* UTF-8;idx 越界返回 "" */
 int gui_excel_cur_sheet(void);
 /* 当前工作表首行的列名(数据列下拉) */
 int gui_excel_col_count(void);
+/* 当前是否已绑定 Excel 数据源(选过文件或拖入过) */
+int gui_excel_bound(void);
 const char *gui_excel_col_name(int idx);     /* UTF-8;越界返回 "" */
 int gui_excel_cur_col(void);
 
