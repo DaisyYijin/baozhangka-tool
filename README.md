@@ -230,8 +230,15 @@ Linux(任意架构):
 sh build/linux_build.sh
 ```
 
-运行测试:
+运行测试(与 CI `verify-linux` job 一致,仅链 core 层,不链平台/GUI):
 
 ```sh
-gcc -std=c99 -O2 -Wall -Isrc/core -DUNICODE tests/test_sheet.c src/core/*.c src/win/platform_win.c -o build/test_sheet.exe -lgdi32 -luser32 && build/test_sheet.exe
+gcc -std=gnu99 -O1 -Isrc/core tests/test_sheet.c \
+    src/core/u8.c src/core/inflate.c src/core/zip.c src/core/sheet.c \
+    src/core/engine.c src/core/ac_keys.c src/core/import.c src/core/checker.c \
+    -o /tmp/ts && /tmp/ts
 ```
+
+> Windows 下请在 MSYS2 shell 中运行同样命令(`test_sheet.c` 在 `_WIN32` 下引用
+> `win_gbk_to_utf8`,可临时补一个返回 NULL 的桩函数,与 Linux 行为等价)。
+> `test_theme.c` 无独立 main,由 GUI 构建联编,单测时跳过。
