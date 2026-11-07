@@ -11,7 +11,8 @@ extern "C" {
 /* 颜色 */
 #define UI_BG       RGB(0xF2, 0xF2, 0xF2)   /* 窗口底色(QQ 灰) */
 #define CARD_BG     RGB(0xFF, 0xFF, 0xFF)   /* 卡片白 */
-#define QQ_BLUE     RGB(0x00, 0x99, 0xFF)   /* QQ 主色 */
+/* 运行时主题色(供原 QQ_BLUE 引用点;定义在 settings.c) */
+#include "settings.h"
 
 /* 字体(gui.c 创建,对话框直接复用) */
 extern HFONT g_uiFont, g_uiFontBold, g_uiFontTitle, g_uiFontSub;
@@ -46,6 +47,8 @@ int gui_excel_cur_sheet(void);
 int gui_excel_col_count(void);
 /* 当前是否已绑定 Excel 数据源(选过文件或拖入过) */
 int gui_excel_bound(void);
+/* 设置对话框(模态):主题色/快捷按钮;返回1=有变更已应用 */
+int settings_dialog(HWND owner);
 const char *gui_excel_col_name(int idx);     /* UTF-8;越界返回 "" */
 int gui_excel_cur_col(void);
 

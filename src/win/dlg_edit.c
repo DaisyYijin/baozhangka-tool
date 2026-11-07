@@ -786,7 +786,7 @@ static LRESULT CALLBACK edit_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         DRAWITEMSTRUCT *dis = (DRAWITEMSTRUCT *)lp;
         if (dis->CtlType == ODT_BUTTON) {
             if ((int)dis->CtlID == IDOK) {
-                draw_accent_button(dis, QQ_BLUE, RGB(0x33,0xAA,0xFF), RGB(0x00,0x7A,0xD4), FALSE);
+                draw_accent_button(dis, ThemeColor(), RGB(0x33,0xAA,0xFF), RGB(0x00,0x7A,0xD4), FALSE);
                 return TRUE;
             }
             draw_flat_button(dis);      /* 取点/取终点/取消 */
@@ -965,7 +965,7 @@ static const struct {
 /* GDI 绘制类型小图标(36x36,QQ 蓝) */
 static void draw_type_icon(HDC dc, int x, int y, int type)
 {
-    COLORREF col = QQ_BLUE;
+    COLORREF col = ThemeColor();
     HPEN pen = CreatePen(PS_SOLID, 2, col);
     HGDIOBJ op = SelectObject(dc, pen);
     HGDIOBJ ob = SelectObject(dc, GetStockObject(NULL_BRUSH));
@@ -1195,7 +1195,7 @@ static void tp_paint(HDC dc)
         BOOL hot = (g_tp.hover == i);
 
         HBRUSH br = CreateSolidBrush(hot ? RGB(0xEF,0xF7,0xFF) : CARD_BG);
-        HBRUSH brPen = CreateSolidBrush(hot ? QQ_BLUE : RGB(0xE6,0xE6,0xE6));
+        HBRUSH brPen = CreateSolidBrush(hot ? ThemeColor() : RGB(0xE6,0xE6,0xE6));
         FillRect(dc, &rc, br);
         FrameRect(dc, &rc, brPen);
         DeleteObject(br);
@@ -1204,7 +1204,7 @@ static void tp_paint(HDC dc)
         draw_type_icon(dc, rc.left + 8, rc.top + 15, TP_ITEMS[i].type);
 
         RECT rcName = { rc.left + 46, rc.top + 12, rc.right - 4, rc.top + 34 };
-        SetTextColor(dc, hot ? QQ_BLUE : RGB(0x2E,0x2E,0x2E));
+        SetTextColor(dc, hot ? ThemeColor() : RGB(0x2E,0x2E,0x2E));
         HGDIOBJ ofb = SelectObject(dc, g_uiFontBold);
         DrawTextW(dc, TP_ITEMS[i].name, -1, &rcName, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         SelectObject(dc, ofb);

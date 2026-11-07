@@ -30,6 +30,7 @@
 #include "u8.h"
 #include "platform_win.h"
 #include "picker.h"
+#include "settings.h"
 #include "dlg_edit.h"
 #include <stdio.h>
 #include <string.h>
@@ -47,6 +48,7 @@ enum {
     IDC_BTN_OPEN, IDC_BTN_SAVE, IDC_BTN_START, IDC_BTN_STOP,
     IDC_BTN_HELP,
     IDC_BTN_SCHED,                  /* 定时执行设置 */
+    IDC_BTN_SETTINGS,               /* 集中设置(主题色/快捷按钮/更多) */
     IDC_ED_LOOPS, IDC_ED_GAP, IDC_ED_COUNTDOWN, IDC_ED_JITTER,
     IDC_BTN_DATA,                 /* Excel 数据行绑定(保留枚举) */
     IDC_CHK_EXCELROWS,            /* 勾选:循环次数=Excel 行数 */
@@ -77,7 +79,7 @@ enum {
 
 #define UI_BG       RGB(0xF2, 0xF2, 0xF2)   /* 窗口底色(QQ 灰) */
 #define CARD_BG     RGB(0xFF, 0xFF, 0xFF)   /* 内容卡片白色 */
-#define QQ_BLUE     RGB(0x00, 0x99, 0xFF)   /* QQ 主色蓝 */
+/* ThemeColor() -> ThemeColor()(settings.c 运行时主题色) */
 
 static const wchar_t MAIN_CLASS[] = L"AcAutoClickerMain";
 static HWND g_hMain, g_hList, g_hStatus, g_hLog;
@@ -97,6 +99,8 @@ static HANDLE g_thread = NULL;
 static int  g_page = 0;        /* 0=任务页 1=日志页 */
 
 /* ---- 共享 UI 资源(见 ui_shared.h) ---- */
+/* 设置变更后:刷新整个界面(主题色/快捷按钮显隐即时生效) */
+static void settings_apply_ui(void);   /* 定义在悬浮窗区之后(g_hFloat 可见处) */
 HFONT g_uiFont, g_uiFontBold, g_uiFontTitle, g_uiFontSub;
 HWND g_uiHotBtn;
 HWND g_uiNavSel;
@@ -118,7 +122,7 @@ void draw_nav_button(DRAWITEMSTRUCT *dis)
 
     COLORREF bg, txtcolor;
     if (selected) {
-        bg = QQ_BLUE;   txtcolor = RGB(255,255,255);
+        bg = ThemeColor();   txtcolor = RGB(255,255,255);
     } else if (!disabled && pressed) {
         bg = RGB(0xDC,0xDC,0xDC); txtcolor = RGB(0x2E,0x2E,0x2E);
     } else if (!disabled && hot) {
@@ -575,6 +579,18 @@ static void toggle_pause(void);
 static void float_update(const wchar_t *text);
 static void float_toggle(void);
 
+/* 设置变更后:刷新整个界面(主题色/快捷按钮显隐即时生效)
+   (定义在此:g_hMain 与 g_hFloat 均已可见) */
+static void settings_apply_ui(void)
+{
+    HWND hF = GetDlgItem(g_hMain, IDC_BTN_FLOAT);
+    HWND hP = GetDlgItem(g_hMain, IDC_BTN_PICK);
+    if (hF) ShowWindow(hF, settings_show_float_btn() ? SW_SHOW : SW_HIDE);
+    if (hP) ShowWindow(hP, settings_show_quick_pick() ? SW_SHOW : SW_HIDE);
+    InvalidateRect(g_hMain, NULL, TRUE);
+    if (g_hFloat && IsWindowVisible(g_hFloat)) InvalidateRect(g_hFloat, NULL, FALSE);
+}
+
 #define FLT_W 336
 #define FLT_H 84
 /* 第一行:状态圆点+进度;第二行(y=FLT_ROW2_Y 起):4 个按钮 */
@@ -679,7 +695,7 @@ static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
             HGDIOBJ of = SelectObject(mem, g_uiFontBold);
             SetTextColor(mem, !run ? RGB(0x44,0x44,0x44) :
-                         pa ? RGB(0xC0,0x70,0x10) : QQ_BLUE);
+                         pa ? RGB(0xC0,0x70,0x10) : ThemeColor());
             RECT rt = { 34, 2, FLT_W - 14, FLT_ROW2_Y };
             DrawTextW(mem, line, -1, &rt,
                       DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -695,7 +711,7 @@ static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             for (int i = 0; i < 4; i++) {
                 RECT rb; flt_btn_rect(i, &rb);
                 int en = flt_btn_enabled(i);
-                COLORREF col = i == 0 ? QQ_BLUE :
+                COLORREF col = i == 0 ? ThemeColor() :
                                i == 1 ? RGB(0xE8,0x93,0x0C) :
                                i == 2 ? RGB(0x30,0xA8,0x53) :
                                         RGB(0xE0,0x4A,0x3E);
@@ -2053,6 +2069,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 { L"导入导出", IDC_BTN_IMPORT },
                 { L"使用说明", IDC_BTN_HELP },
                 { L"定时",     IDC_BTN_SCHED },
+                { L"设置",     IDC_BTN_SETTINGS },
             };
             int ny = 14 + (NAV_BTN_H + 6) * 2 + 12;   /* 分隔区之后(任务/日志两页签) */
             int navN = (int)(sizeof(nav) / sizeof(nav[0]));
@@ -2222,7 +2239,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 if (g_running)
                     draw_accent_button(dis, RGB(0xE0,0x4A,0x3E), RGB(0xEA,0x6E,0x63), RGB(0xB5,0x2C,0x22), FALSE);
                 else
-                    draw_accent_button(dis, QQ_BLUE, RGB(0x33,0xAA,0xFF), RGB(0x00,0x7A,0xD4), FALSE);
+                    draw_accent_button(dis, ThemeColor(), RGB(0x33,0xAA,0xFF), RGB(0x00,0x7A,0xD4), FALSE);
                 return TRUE;
             case IDC_BTN_LOGCLEAR:
             case IDC_BTN_FLOAT:
@@ -2235,8 +2252,8 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     int sel = (tab == g_curTask);
                     HDC dc = dis->hDC;
                     RECT rc = dis->rcItem;
-                    HBRUSH br = CreateSolidBrush(sel ? QQ_BLUE : CARD_BG);
-                    HPEN pen = CreatePen(PS_SOLID, 1, sel ? QQ_BLUE : RGB(0xC8,0xD4,0xE8));
+                    HBRUSH br = CreateSolidBrush(sel ? ThemeColor() : CARD_BG);
+                    HPEN pen = CreatePen(PS_SOLID, 1, sel ? ThemeColor() : RGB(0xC8,0xD4,0xE8));
                     HGDIOBJ ob = SelectObject(dc, br);
                     HGDIOBJ op = SelectObject(dc, pen);
                     Rectangle(dc, rc.left, rc.top, rc.right, rc.bottom);
@@ -2434,6 +2451,12 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case IDC_BTN_SCHED:
             sched_dialog(hwnd, sched_get, sched_set);
             return 0;
+        case IDC_BTN_SETTINGS:
+            if (settings_dialog(hwnd)) {
+                /* 主题色/开关即时生效:整体重绘 */
+                settings_apply_ui();
+            }
+            return 0;
         case IDC_BTN_LOGCLEAR:
             SetWindowTextW(g_hLog, L"");
             log_add(L"日志已清空");
@@ -2626,6 +2649,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmdLine, int show)
     ac_srand((uint32_t)GetTickCount());
 
     autoload();                        /* 启动时自动恢复上次任务 */
+    settings_load();                   /* 加载设置(主题色/快捷按钮) */
 
     WNDCLASSW wc;
     memset(&wc, 0, sizeof(wc));
