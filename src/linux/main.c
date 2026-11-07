@@ -7,6 +7,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
+#include <X11/cursorfont.h>
 #include <pthread.h>
 #include <string.h>
 #include <stdio.h>
@@ -14,6 +15,8 @@
 #include <stdarg.h>
 #include <time.h>
 #include <unistd.h>
+#include <locale.h>
+#include <wchar.h>
 #include "ac_defs.h"
 #include "engine.h"
 #include "ac_keys.h"
@@ -22,6 +25,13 @@
 #include "u8.h"
 #include "platform_x11.h"
 #include "xui.h"
+
+#undef MIN
+#undef MAX
+#undef ABS
+#define MIN(a,b) ((a)<(b)?(a):(b))
+#define MAX(a,b) ((a)>(b)?(a):(b))
+#define ABS(a)   ((a)<0?-(a):(a))
 
 static XUi *g_ui;
 static XuiWin *g_win;
@@ -315,7 +325,6 @@ static int pick_screen_point(PickRect *out)
             else
                 snprintf(buf, sizeof(buf),
                          "\xe5\xbd\x93\xe5\x89\x8d\xe5\x9d\x90\xe6\xa0\x87:(%d, %d)", cx, cy);
-            clip_off(g_ui);
             XSetForeground(d, gc, white);
             XFillRectangle(d, ov, gc, cx + 13, cy + 16,
                            (unsigned)xui_text_w(g_ui, buf) + 8, 24);
@@ -633,6 +642,13 @@ static void on_edit(XuiWgt *btn, void *data)
     if (edit_step_dialog(&g_task.steps[i], 0)) refresh_list();
 }
 
+/* 列表双击 -> 编辑(XuiListFn 签名包装) */
+static void on_list_activate(XuiWgt *l, int row, void *ud)
+{
+    (void)l; (void)row; (void)ud;
+    on_edit(NULL, NULL);
+}
+
 static void on_del(XuiWgt *btn, void *data)
 {
     (void)btn; (void)data;
@@ -755,7 +771,7 @@ int main(int argc, char **argv)
     xui_list_set_header(g_list, 4, "\xe6\x96\x87\xe6\x9c\xac / \xe6\x8c\x89\xe9\x94\xae");
     xui_list_set_header(g_list, 5, "\xe5\xbb\xb6\xe8\xbf\x9f \xe5\x89\x8d/\xe5\x90\x8ems");
     xui_list_set_header(g_list, 6, "\xe5\xa4\x87\xe6\xb3\xa8");
-    xui_list_cb(g_list, NULL, on_edit, NULL);
+    xui_list_cb(g_list, NULL, on_list_activate, NULL);
 
     /* 状态栏 */
     g_status = xui_statusbar(g_win, 10, 612, 1000, 28);

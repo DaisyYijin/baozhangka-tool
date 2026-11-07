@@ -11,6 +11,7 @@
 #include "ac_keys.h"
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 /* ---------------- 动作类型表 ---------------- */
 

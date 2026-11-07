@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <string.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include "platform_x11.h"
