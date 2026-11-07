@@ -12,7 +12,6 @@
 | `baozhangka-tool-linux-x86_64.tar.gz` | Linux(桌面发行版) | x86_64 / AMD64 | **零依赖**(仅 X11 桌面自带的 libX11 + libXtst) |
 | `baozhangka-tool-linux-arm64.tar.gz` | Linux | **ARM64 / aarch64**(树莓派 4/5、ARM 小主机、国产 ARM 平台) | 原生编译 |
 | `baozhangka-tool-linux-armhf.tar.gz` | Linux | ARM32 / armhf(树莓派 3 等 32 位系统) | 原生编译 |
-| `baozhangka-checker-web.zip` | 任意(浏览器) | — | **网页版综合检查工具**(数据校验/联审/字段生成等),放到主程序目录(或解压)后,侧栏「综合检查」按钮一键打开——检测到 zip 会**自动解压**;也可独立双击 `主程序.html` 使用 |
 
 > **Windows on ARM(Surface Pro X /骁龙本)**:直接使用 `windows-xp-x86` 版,
 > Win11 ARM 的内置 x86 模拟即可运行,无需单独的 ARM64 版本。
@@ -37,7 +36,6 @@ Windows 版与 Linux 版共享同一套核心引擎(纯 C 编写,见 `src/core`)
 - **任务文件 = 标准 CSV**:保存的任务可用 Excel 直接打开编辑,再导回来
 - **循环执行**:次数(0=无限)、循环间隔、开始倒计时、随机抖动
 - **全局热键**:**F6 开始 / Ctrl+F12 停止**(任何界面下生效)
-- **综合检查**:侧栏「综合检查」打开网页版四表联审工具(需从 Release 下载 checker-web.zip 解压到程序目录)
 - **Excel 多列占位符**:输入文本支持 `{列名}` / `{列N}` 取任意列(如 `账号:{账号} 密码:{密码}`),`{行}` 仍为选定列
 - **等待窗口**:新动作「等窗口」——等待标题包含指定文本的窗口出现再继续(比固定延时可靠,超时可设)
 - **颜色判断**:新动作「判断」——屏幕取色点与目标色比对(容差可设),满足则跳转到指定步骤,否则继续
@@ -58,7 +56,6 @@ Windows 版与 Linux 版共享同一套核心引擎(纯 C 编写,见 `src/core`)
 建议:把 exe 放在一个固定文件夹(如 `D:\保障卡工具\`),因为同目录会保存:
 
 - `last_task.csv` —— 上次任务(自动保存 / 启动恢复)
-- `保障卡综合检查工具\` —— 综合检查网页工具(见下)
 
 全局热键:**F6 开始 / Ctrl+F12 停止**(任何界面下有效)。
 
@@ -92,13 +89,6 @@ chmod +x baozhangka-tool
 ### 🍎 macOS
 
 暂无原生版本。Mac 用户可在虚拟机 / Parallels 中运行 Windows 版。
-
-### 📄 综合检查工具(四表联审,所有系统通用)
-
-1. 下载 **`baozhangka-checker-web.zip`**;
-2. **放到主程序 exe 旁边**(不要解压)→ 打开主程序,点侧栏「综合检查」—— 程序会**自动解压**并用浏览器打开;
-   - Linux 用户:解压 zip,双击 `保障卡综合检查工具/主程序.html`;
-3. 或完全不用主程序,直接双击 `主程序.html` 在浏览器中使用(对比保障卡/人资/财务/被装四表数据)。
 
 ### 🔧 从源码构建(开发者)
 
@@ -235,7 +225,7 @@ sh build/linux_build.sh
 ```sh
 gcc -std=gnu99 -O1 -Isrc/core tests/test_sheet.c \
     src/core/u8.c src/core/inflate.c src/core/zip.c src/core/sheet.c \
-    src/core/engine.c src/core/ac_keys.c src/core/import.c src/core/checker.c \
+    src/core/engine.c src/core/ac_keys.c src/core/import.c \
     -o /tmp/ts && /tmp/ts
 ```
 

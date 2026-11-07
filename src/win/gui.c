@@ -46,7 +46,6 @@ enum {
     IDC_BTN_PICK, IDC_BTN_IMPORT, IDC_BTN_FLOAT,
     IDC_BTN_OPEN, IDC_BTN_SAVE, IDC_BTN_START, IDC_BTN_STOP,
     IDC_BTN_HELP,
-    IDC_BTN_CHECKER,                /* 打开网页版综合检查工具 */
     IDC_BTN_SCHED,                  /* 定时执行设置 */
     IDC_ED_LOOPS, IDC_ED_GAP, IDC_ED_COUNTDOWN, IDC_ED_JITTER,
     IDC_BTN_DATA,                 /* Excel 数据行绑定(保留枚举) */
@@ -1508,125 +1507,6 @@ enum {
     CTX_EDIT, CTX_DEL, CTX_UP, CTX_DOWN, CTX_DUP
 };
 
-/* zip 解压到目录(枚举条目逐个写出;zip_list 回调无用户参,用静态上下文) */
-static const unsigned char *g_czData;
-static size_t g_czSize;
-static const wchar_t *g_czRoot;
-static int g_czFiles;
-
-static int cz_cb(const char *name, void *ud)
-{
-    (void)ud;
-    if (!name || !name[0]) return 0;
-    wchar_t wrel[512];
-    if (u8_to_wcs(name, wrel, 511) == 0) return 0;
-    for (wchar_t *q = wrel; *q; q++)
-        if (*q == L'/') *q = L'\\';
-    wchar_t full[MAX_PATH + 512];
-    _snwprintf(full, MAX_PATH + 511, L"%ls\\%ls", g_czRoot, wrel);
-    full[MAX_PATH + 511] = 0;
-    size_t L = wcslen(full);
-    if (L && full[L - 1] == L'\\') {              /* 目录条目 */
-        full[L - 1] = 0;
-        SHCreateDirectoryExW(NULL, full, NULL);
-        return 0;
-    }
-    wchar_t *sl = wcsrchr(full, L'\\');
-    if (sl) {
-        *sl = 0;
-        SHCreateDirectoryExW(NULL, full, NULL);
-        *sl = L'\\';
-    }
-    size_t outLen = 0;
-    uint8_t *d = zip_read(g_czData, g_czSize, name, 0, NULL, 0, &outLen);
-    if (!d) return 0;
-    FILE *f = _wfopen(full, L"wb");
-    if (f) {
-        fwrite(d, 1, outLen, f);
-        fclose(f);
-        g_czFiles++;
-    }
-    free(d);
-    return 0;
-}
-
-/* exe 旁有 checker zip 时自动解压(先解压到临时目录,全部成功后替换,
-   避免中途失败留下半套目录);返回解压文件数,失败返回 0 */
-static int checker_try_extract(const wchar_t *dir)
-{
-    static const wchar_t *zips[] = { L"baozhangka-checker-web.zip",
-                                     L"保障卡综合检查工具.zip" };
-    wchar_t zp[MAX_PATH + 32], tmp[MAX_PATH + 40];
-    for (int i = 0; i < 2; i++) {
-        _snwprintf(zp, MAX_PATH + 31, L"%ls%ls", dir, zips[i]);
-        zp[MAX_PATH + 31] = 0;
-        size_t len = 0;
-        unsigned char *data = read_file_all(zp, &len);
-        if (!data) continue;
-        _snwprintf(tmp, MAX_PATH + 39, L"%lsac_extract_tmp", dir);
-        tmp[MAX_PATH + 39] = 0;
-        SHCreateDirectoryExW(NULL, tmp, NULL);
-        g_czData = data;
-        g_czSize = len;
-        g_czRoot = tmp;
-        g_czFiles = 0;
-        zip_list(data, len, cz_cb, NULL);
-        free(data);
-        if (g_czFiles > 0) {
-            wchar_t dst[MAX_PATH + 40];
-            _snwprintf(dst, MAX_PATH + 39, L"%ls保障卡综合检查工具", dir);
-            dst[MAX_PATH + 39] = 0;
-            wchar_t from[MAX_PATH + 56];
-            _snwprintf(from, MAX_PATH + 55, L"%ls\\保障卡综合检查工具", tmp);
-            from[MAX_PATH + 55] = 0;
-            /* 旧目录(可能不完整)删除后用完整版替换 */
-            SHFILEOPSTRUCTW op;
-            memset(&op, 0, sizeof(op));
-            op.wFunc = FO_DELETE;
-            op.pFrom = dst;
-            op.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
-            SHFileOperationW(&op);
-            if (MoveFileW(from, dst)) {
-                RemoveDirectoryW(tmp);
-                log_add(L"综合检查工具:已从 %ls 解压 %d 个文件", zips[i], g_czFiles);
-                return g_czFiles;
-            }
-        }
-        /* 失败清理临时目录 */
-        SHFILEOPSTRUCTW cl;
-        memset(&cl, 0, sizeof(cl));
-        cl.wFunc = FO_DELETE;
-        cl.pFrom = tmp;
-        cl.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
-        SHFileOperationW(&cl);
-    }
-    return 0;
-}
-
-/* 打开网页版「保障卡综合检查工具」:
-   优先 exe 旁的 保障卡综合检查工具\主程序.html(从 Release 下载
-   baozhangka-checker-web.zip 解压);未找到时提示 */
-static void open_checker_tool(void)
-{
-    wchar_t dir[MAX_PATH], html[MAX_PATH + 64];
-    GetModuleFileNameW(NULL, dir, MAX_PATH);
-    wchar_t *p = wcsrchr(dir, L'\\');
-    if (p) *(p + 1) = 0;
-    _snwprintf(html, MAX_PATH + 63, L"%ls保障卡综合检查工具\\主程序.html", dir);
-    html[MAX_PATH + 63] = 0;
-    if (GetFileAttributesW(html) == INVALID_FILE_ATTRIBUTES)
-        checker_try_extract(dir);          /* exe 旁有 zip 则自动解压 */
-    if (GetFileAttributesW(html) != INVALID_FILE_ATTRIBUTES) {
-        ShellExecuteW(NULL, L"open", html, NULL, NULL, SW_SHOWNORMAL);
-        log_add(L"已打开综合检查工具(浏览器)");
-    } else {
-        msg_info(L"未找到综合检查工具。\n\n"
-                 L"请从 GitHub Release 下载 baozhangka-checker-web.zip,\n"
-                 L"直接放到本程序所在目录(无需手动解压,程序会自动解压),\n"
-                 L"再次点击「综合检查」即可打开。");
-    }
-}
-
 static void show_help(void)
 {
     MessageBoxW(g_hMain,
@@ -2049,7 +1929,6 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 { L"↓ 下移",   IDC_BTN_DOWN },
                 { L"导入导出", IDC_BTN_IMPORT },
                 { L"使用说明", IDC_BTN_HELP },
-                { L"综合检查", IDC_BTN_CHECKER },   /* 打开网页版四表联审 */
                 { L"定时",     IDC_BTN_SCHED },
             };
             int ny = 14 + (NAV_BTN_H + 6) * 2 + 12;   /* 分隔区之后(任务/日志两页签) */
@@ -2410,7 +2289,6 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         switch (id) {
         case IDC_NAV_TASK:  switch_page(0); return 0;
         case IDC_NAV_LOG:   switch_page(1); return 0;
-        case IDC_BTN_CHECKER: open_checker_tool(); return 0;
         case IDC_BTN_SCHED:
             sched_dialog(hwnd, sched_get, sched_set);
             return 0;
