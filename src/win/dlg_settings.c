@@ -253,7 +253,6 @@ int settings_dialog(HWND owner)
                         g_st.chkFloat, g_st.chkPick, g_st.ok, g_st.cancel, NULL };
         for (int i = 0; kids[i]; i++)
             SendMessageW(kids[i], WM_SETFONT, (WPARAM)g_uiFont, TRUE);
-        EnumChildWindows(g_st.hwnd, NULL, 0);   /* no-op 保持结构 */
     }
 
     sync_custom_edits();
