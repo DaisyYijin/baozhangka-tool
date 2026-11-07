@@ -1,5 +1,5 @@
 ﻿/* ============================================================
- * gui.c - 自动点击器主界面(Win32 API,XP~Win11)
+ * gui.c - 点击助手主界面(Win32 API,XP~Win11)
  *
  * 功能:
  *   · 步骤列表管理:单击/双击/多击/右击/中击/范围/输入/按键/
@@ -731,11 +731,11 @@ static void set_status(const wchar_t *fmt, ...)
 
 static void msg_info(const wchar_t *s)
 {
-    MessageBoxW(g_hMain, s, L"保障卡全能工具", MB_ICONINFORMATION);
+    MessageBoxW(g_hMain, s, L"点击助手", MB_ICONINFORMATION);
 }
 static void msg_err(const wchar_t *s)
 {
-    MessageBoxW(g_hMain, s, L"保障卡全能工具", MB_ICONERROR);
+    MessageBoxW(g_hMain, s, L"点击助手", MB_ICONERROR);
 }
 
 static HWND mk(const wchar_t *cls, const wchar_t *text, DWORD style,
@@ -1535,7 +1535,7 @@ static void show_help(void)
         L"5. 开始:F6 或『开始』按钮;停止:再点同一按钮或 Ctrl+F12(全局热键)\n"
         L"5. 前延时/后延时:每步执行前后等待的时间\n\n"
         L"提示:执行期间请勿移动鼠标,点击/输入动作依赖鼠标键盘模拟。",
-        L"使用说明 - 保障卡全能工具", MB_ICONINFORMATION);
+        L"使用说明 - 点击助手", MB_ICONINFORMATION);
 }
 
 /* 右键菜单 */
@@ -2065,7 +2065,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         ShowWindow(GetDlgItem(hwnd, IDC_CHK_AUTOSCROLL), SW_HIDE);
 
         refresh_list();
-        log_add(L"程序启动 · 保障卡全能工具 v1.0(Windows XP~Win11)");
+        log_add(L"程序启动 · 点击助手 v1.0(Windows XP~Win11)");
         return 0;
     }
 
@@ -2415,7 +2415,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case M_HELP:  show_help(); return 0;
         case M_ABOUT:
             MessageBoxW(hwnd,
-                L"保障卡全能工具 v1.0\n支持 Windows XP / 7 / 8 / 10 / 11(32/64 位)\n\n"
+                L"点击助手 v1.0\n支持 Windows XP / 7 / 8 / 10 / 11(32/64 位)\n\n"
                 L"功能:屏幕取点、单击/双击/多击、右击/中击、文本输入、\n"
                 L"组合键、滚轮、拖动、Excel 导入步骤与输入列、运行日志\n\n"
                 L"单文件绿色软件,无需安装。",
@@ -2513,7 +2513,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmdLine, int show)
     int h = sh > 760 ? 700 : sh - 60;
 
     g_hMain = CreateWindowExW(0, MAIN_CLASS,
-        L"保障卡全能工具",
+        L"点击助手",
         WS_OVERLAPPEDWINDOW,
         (sw - w) / 2, (sh - h) / 3, w, h,
         NULL, NULL, hInst, NULL);

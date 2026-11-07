@@ -1,5 +1,5 @@
 /* ============================================================
- * main.c - 自动点击器 Linux 版主界面(纯 Xlib / xui)
+ * main.c - 点击助手 Linux 版主界面(纯 Xlib / xui)
  * 与 Windows 版共享 src/core 全部核心逻辑,零第三方依赖
  * (仅 libX11 + libXtst,任何 X11 桌面自带)
  * ============================================================ */
@@ -851,7 +851,7 @@ int main(int argc, char **argv)
     }
 
     g_win = xui_window_new(g_ui, 1020, 660,
-                           "\xe4\xbf\x9d\xe9\x9c\x9c\xe5\x8d\xa1\xe5\x85\xa8\xe8\x83\xbd\xe5\xb7\xa5\xe5\x85\xb7(Linux)"
+                           "\xe7\x82\xb9\xe5\x87\xbb\xe5\x8a\xa9\xe6\x89\x8b(Linux)"
                            " - Excel \xe5\xaf\xbc\xe5\x85\xa5 \xc2\xb7 \xe8\xbe\x93\xe5\x85\xa5\xe5\x89\x8d\xe6\xb8\x85\xe7\xa9\xba");
     xui_window_set_close(g_win, on_close, NULL);
 

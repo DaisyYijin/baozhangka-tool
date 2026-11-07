@@ -1197,7 +1197,7 @@ int pick_step_type_dialog(HWND owner)
     int winH = rcAdj.bottom - rcAdj.top;
 
     g_tp.hwnd = CreateWindowExW(
-        WS_EX_DLGMODALFRAME, TYPE_PICK_CLASS, L"选择步骤类型 - 保障卡全能工具",
+        WS_EX_DLGMODALFRAME, TYPE_PICK_CLASS, L"选择步骤类型 - 点击助手",
         tpStyle, cx, cy, winW, winH,
         owner, NULL, wc.hInstance, NULL);
     if (!g_tp.hwnd) return -1;
@@ -1259,7 +1259,7 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
     RegisterClassW(&wc);
 
     wchar_t title[128];
-    _snwprintf(title, 127, L"%ls步骤[%ls] - 保障卡全能工具",
+    _snwprintf(title, 127, L"%ls步骤[%ls] - 点击助手",
                isNew ? L"添加" : L"编辑", act_type_name(s->type));
     title[127] = 0;
 
