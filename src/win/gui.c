@@ -1562,21 +1562,25 @@ static void save_task(void)
 
 static void add_step(void)
 {
-    /* 第一步:选择步骤类型 */
-    int type = pick_step_type_dialog(g_hMain);
-    if (type < 0) return;
+    for (;;) {
+        /* 第一步:选择步骤类型(此处取消/Esc = 退出整个添加流程) */
+        int type = pick_step_type_dialog(g_hMain);
+        if (type < 0) return;
 
-    /* 第二步:详细设置 */
-    Step s;
-    memset(&s, 0, sizeof(s));
-    s.type = type;
+        /* 第二步:详细设置(取消则回到类型选择重新选) */
+        Step s;
+        memset(&s, 0, sizeof(s));
+        s.type = type;
         s.delayAfter = 200;
-    g_mark_seq = g_task.count + 1;      /* 取点预览标记用序号 */
-    if (edit_step_dialog(g_hMain, &s, 1)) {
-        task_add(&g_task, &s);
-        refresh_list();
-        ListView_SetItemState(g_hList, g_task.count - 1,
-                              LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+        g_mark_seq = g_task.count + 1;      /* 取点预览标记用序号 */
+        if (edit_step_dialog(g_hMain, &s, 1)) {
+            task_add(&g_task, &s);
+            refresh_list();
+            ListView_SetItemState(g_hList, g_task.count - 1,
+                                  LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+            return;
+        }
+        /* 编辑框取消 → 继续循环,重新选择类型 */
     }
 }
 
