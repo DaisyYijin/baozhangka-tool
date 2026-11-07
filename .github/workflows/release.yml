@@ -99,41 +99,53 @@ jobs:
           name: baozhangka-tool-windows-xp-x86
           path: baozhangka-tool-windows-xp-x86.zip
 
-  # ---------- Linux x86_64(原生) ----------
+  # ---------- Linux x86_64(原生;debian:buster 老 glibc 基线,兼容老发行版) ----------
   linux-x86_64:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install deps
+      - name: Build in debian:buster (old-glibc baseline)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc pkg-config file libxtst-dev
-      - name: Build
-        run: |
-          sh build/linux_build.sh
-          file dist/baozhangka-tool
+          mkdir -p dist-out
+          docker run --rm -v "${{ github.workspace }}:/repo" debian:buster bash -c "
+            set -e
+            cp -r /repo /src && cd /src
+            apt-get update -qq
+            apt-get install -y -qq gcc pkg-config file binutils libx11-dev libxtst-dev
+            sh build/linux_build.sh
+            file dist/baozhangka-tool
+            echo '=== glibc symbol versions required (sorted, highest last) ==='
+            objdump -T dist/baozhangka-tool | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -3
+            cp dist/baozhangka-tool /repo/dist-out/
+          "
       - name: Package
-        run: tar -czf baozhangka-tool-linux-x86_64.tar.gz -C dist baozhangka-tool
+        run: tar -czf baozhangka-tool-linux-x86_64.tar.gz -C dist-out baozhangka-tool
       - uses: actions/upload-artifact@v4
         with:
           name: baozhangka-tool-linux-x86_64
           path: baozhangka-tool-linux-x86_64.tar.gz
 
-  # ---------- Linux ARM64(原生,官方 ARM runner) ----------
+  # ---------- Linux ARM64(原生 runner;debian:buster 老 glibc 基线,兼容银河麒麟 V10) ----------
   linux-arm64:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-      - name: Install deps
+      - name: Build in debian:buster (old-glibc baseline for Kylin V10)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc pkg-config file libxtst-dev
-      - name: Build
-        run: |
-          sh build/linux_build.sh
-          file dist/baozhangka-tool
+          mkdir -p dist-out
+          docker run --rm -v "${{ github.workspace }}:/repo" debian:buster bash -c "
+            set -e
+            cp -r /repo /src && cd /src
+            apt-get update -qq
+            apt-get install -y -qq gcc pkg-config file binutils libx11-dev libxtst-dev
+            sh build/linux_build.sh
+            file dist/baozhangka-tool
+            echo '=== glibc symbol versions required (sorted, highest last) ==='
+            objdump -T dist/baozhangka-tool | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -3
+            cp dist/baozhangka-tool /repo/dist-out/
+          "
       - name: Package
-        run: tar -czf baozhangka-tool-linux-arm64.tar.gz -C dist baozhangka-tool
+        run: tar -czf baozhangka-tool-linux-arm64.tar.gz -C dist-out baozhangka-tool
       - uses: actions/upload-artifact@v4
         with:
           name: baozhangka-tool-linux-arm64
