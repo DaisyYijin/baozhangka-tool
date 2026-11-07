@@ -38,9 +38,9 @@ static void print_task(const Task *t)
         Step *s = &t->steps[i];
         wchar_t text[128] = L"";
         wcsncpy(text, s->text, 127);
-        printf("  #%d type=%ls x=%d y=%d w=%d h=%d n=%d gap=%d text=%ls clr=%d en=%d db=%d da=%d\n",
+        printf("  #%d type=%ls x=%d y=%d w=%d h=%d n=%d gap=%d text=%ls clr=%d db=%d da=%d\n",
                i + 1, act_type_name(s->type), s->x, s->y, s->w, s->h,
-               s->count, s->interval, text, s->clearFirst, s->enabled,
+               s->count, s->interval, text, s->clearFirst,
                s->delayBefore, s->delayAfter);
     }
 }
