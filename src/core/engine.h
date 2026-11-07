@@ -35,6 +35,11 @@ void task_clear(Task *t);
 uint32_t ac_lcg_rand(void);
 void ac_srand(uint32_t seed);
 
+/* 暂停/恢复:暂停时引擎在当前动作/延时边界挂起(不占CPU),恢复后继续。
+   由 UI 线程调用;与 stop 同时置位时 stop 优先 */
+void engine_pause(int on);
+int  engine_paused(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -63,6 +63,7 @@ enum {
 #define WM_APP_DONE       (WM_APP + 2)
 #define HOTK_STOP   1
 #define HOTK_START  2
+#define HOTK_PAUSE  3
 
 /* QQ 风格布局:左侧导航栏 + 白色圆角内容卡片 */
 #define NAV_W      64    /* 左侧导航栏宽度 */
@@ -90,6 +91,7 @@ static HBRUSH g_hbrBg, g_hbrCard;
 static TaskBook g_taskbook;                 /* 任务簿(8 TAB) */
 #define g_task (g_taskbook.tasks[g_curTask])/* 当前任务(旧代码无缝适配) */
 static int  g_running = 0;
+static int  g_progLoop = 0;        /* 引擎当前轮次(=Excel 模式的当前行,进度分子) */
 static int  g_hiddenByRun = 0;     /* 执行期间自动隐藏主窗(结束后恢复;悬浮窗模式不隐藏) */
 static HANDLE g_thread = NULL;
 static int  g_page = 0;        /* 0=任务页 1=日志页 */
@@ -562,23 +564,68 @@ void mark_clear_preview(void)
     if (g_hPreviewMark) { DestroyWindow(g_hPreviewMark); g_hPreviewMark = NULL; }
 }
 
-/* ================= 置顶悬浮窗(状态 + 开始/停止,可拖动) ================= */
+/* ================= 置顶悬浮窗(进度 + 开始/暂停/继续/停止,可拖动) ================= */
 
 static HWND g_hFloat = NULL;
 static wchar_t g_floatText[96] = L"空闲";
 
 static void start_run(void);
 static void stop_run(void);
+static void toggle_pause(void);
 static void float_update(const wchar_t *text);
 static void float_toggle(void);
 
-#define FLT_W 252
-#define FLT_H 36
-/* 悬浮窗内按钮区(窗口坐标,右侧) */
-#define FLT_BTN_X (FLT_W - 12 - 58)
-#define FLT_BTN_Y 7
-#define FLT_BTN_W 58
-#define FLT_BTN_H 22
+#define FLT_W 280
+#define FLT_H 76
+/* 第一行:状态+进度;第二行(y=FLT_ROW2_Y 起):4 个按钮 */
+#define FLT_ROW2_Y  38
+#define FLT_BTN_H   26
+
+static void flt_btn_rect(int i, RECT *rc)
+{
+    static const int bw[4] = { 58, 58, 58, 70 };   /* 开始/暂停/继续/停止 */
+    int x = 12;
+    for (int k = 0; k < i; k++) x += bw[k] + 4;
+    SetRect(rc, x, FLT_ROW2_Y + 6, x + bw[i], FLT_ROW2_Y + 6 + FLT_BTN_H);
+}
+
+static int flt_btn_enabled(int i)
+{
+    int run = g_running, pa = run && engine_paused();
+    switch (i) {
+    case 0: return !run;              /* 开始 */
+    case 1: return run && !pa;        /* 暂停 */
+    case 2: return pa;                /* 继续 */
+    default: return run;              /* 停止 */
+    }
+}
+
+static int flt_btn_at(int x, int y)   /* 命中测试:-1=非按钮区 */
+{
+    for (int i = 0; i < 4; i++) {
+        RECT rc; flt_btn_rect(i, &rc);
+        if (x >= rc.left && x < rc.right && y >= rc.top && y < rc.bottom) return i;
+    }
+    return -1;
+}
+
+/* 进度行:空闲/倒计时=状态文字;运行中=状态+行进度(Excel:当前行/总行数) */
+static void flt_status_text(wchar_t *out, int cap)
+{
+    if (!g_running || g_progLoop <= 0) {
+        _snwprintf(out, cap - 1, L"%s", g_floatText);
+        out[cap - 1] = 0;
+        return;
+    }
+    int total = g_task.loopsFromExcel ? g_task.dataRowCount : g_task.loops;
+    const wchar_t *st = engine_paused() ? L"已暂停" : L"运行中";
+    if (total > 0)
+        _snwprintf(out, cap - 1, L"%s %d/%d (%d%%)", st, g_progLoop, total,
+                   g_progLoop * 100 / total);
+    else
+        _snwprintf(out, cap - 1, L"%s 第 %d 轮", st, g_progLoop);
+    out[cap - 1] = 0;
+}
 
 static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -611,31 +658,46 @@ static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
         SetBkMode(mem, TRANSPARENT);
 
-        /* 状态文字(单行,垂直居中) */
-        HGDIOBJ of = SelectObject(mem, g_uiFontBold);
-        SetTextColor(mem, g_running ? QQ_BLUE : RGB(0x44,0x44,0x44));
+        /* 第一行:状态 + 进度(空闲/倒计时/Excel 行进度) */
         {
-            RECT rt = { 12, 0, FLT_BTN_X - 8, FLT_H };
-            DrawTextW(mem, g_floatText, -1, &rt,
+            wchar_t line[96];
+            flt_status_text(line, 96);
+            HGDIOBJ of = SelectObject(mem, g_uiFontBold);
+            SetTextColor(mem, !g_running ? RGB(0x44,0x44,0x44) :
+                         engine_paused() ? RGB(0xC0,0x70,0x10) : QQ_BLUE);
+            RECT rt = { 12, 4, FLT_W - 12, FLT_ROW2_Y };
+            DrawTextW(mem, line, -1, &rt,
                       DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+            SelectObject(mem, of);
         }
 
-        /* 运行按钮(蓝=开始,红=停止) */
-        RECT rb = { FLT_BTN_X, FLT_BTN_Y, FLT_BTN_X + FLT_BTN_W, FLT_BTN_Y + FLT_BTN_H };
-        COLORREF col = g_running ? RGB(0xE0,0x4A,0x3E) : QQ_BLUE;
-        HBRUSH brB = CreateSolidBrush(col);
-        HPEN penB = CreatePen(PS_SOLID, 1, col);
-        HGDIOBJ opb = SelectObject(mem, penB);
-        HGDIOBJ obb = SelectObject(mem, brB);
-        Rectangle(mem, rb.left, rb.top, rb.right, rb.bottom);
-        SelectObject(mem, opb);
-        SelectObject(mem, obb);
-        DeleteObject(brB);
-        DeleteObject(penB);
-        SetTextColor(mem, RGB(255,255,255));
-        DrawTextW(mem, g_running ? L"停 止" : L"开 始", -1, &rb,
-                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        SelectObject(mem, of);
+        /* 第二行:开始/暂停/继续/停止(带快捷键标注,按状态置灰) */
+        {
+            static const wchar_t *btnTxt[4] = {
+                L"开始 F6", L"暂停 F7", L"继续 F7", L"停止 ^F12"
+            };
+            for (int i = 0; i < 4; i++) {
+                RECT rb; flt_btn_rect(i, &rb);
+                int en = flt_btn_enabled(i);
+                COLORREF col = !en ? RGB(0xC6,0xC6,0xC6) :
+                               i == 0 ? QQ_BLUE :
+                               i == 1 ? RGB(0xD9,0x8A,0x1E) :
+                               i == 2 ? RGB(0x2E,0x9E,0x4F) :
+                                        RGB(0xE0,0x4A,0x3E);
+                HBRUSH brB = CreateSolidBrush(col);
+                HPEN penB = CreatePen(PS_SOLID, 1, col);
+                HGDIOBJ opb = SelectObject(mem, penB);
+                HGDIOBJ obb = SelectObject(mem, brB);
+                Rectangle(mem, rb.left, rb.top, rb.right, rb.bottom);
+                SelectObject(mem, opb);
+                SelectObject(mem, obb);
+                DeleteObject(brB);
+                DeleteObject(penB);
+                SetTextColor(mem, RGB(255,255,255));
+                DrawTextW(mem, btnTxt[i], -1, &rb,
+                          DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+            }
+        }
 
         BitBlt(dc, 0, 0, rc.right, rc.bottom, mem, 0, 0, SRCCOPY);
         SelectObject(mem, oldBmp);
@@ -646,22 +708,19 @@ static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_LBUTTONUP: {
         int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
-        if (x >= FLT_BTN_X && x < FLT_BTN_X + FLT_BTN_W &&
-            y >= FLT_BTN_Y && y < FLT_BTN_Y + FLT_BTN_H) {
-            if (g_running) stop_run();
-            else            start_run();
+        int i = flt_btn_at(x, y);
+        if (i >= 0 && flt_btn_enabled(i)) {
+            if (i == 0) start_run();
+            else if (i == 3) stop_run();
+            else toggle_pause();              /* 暂停/继续同一切换 */
         }
         return 0;
     }
     case WM_LBUTTONDOWN:
         /* 非按钮区:拖动窗口 */
-        {
-            int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
-            if (!(x >= FLT_BTN_X && x < FLT_BTN_X + FLT_BTN_W &&
-                  y >= FLT_BTN_Y && y < FLT_BTN_Y + FLT_BTN_H)) {
-                ReleaseCapture();
-                SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
-            }
+        if (flt_btn_at(GET_X_LPARAM(lp), GET_Y_LPARAM(lp)) < 0) {
+            ReleaseCapture();
+            SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
         }
         return 0;
     case WM_RBUTTONUP:
@@ -950,6 +1009,22 @@ static void start_run(void)
     g_thread = CreateThread(NULL, 0, run_thread, NULL, 0, NULL);
 }
 
+/* 暂停/继续(F7):当前动作/延时完成后挂起,恢复后继续 */
+static void toggle_pause(void)
+{
+    if (!g_running) return;
+    int on = !engine_paused();
+    engine_pause(on);
+    if (on) {
+        log_add(L"已暂停 —— F7 继续 / Ctrl+F12 停止");
+        set_status(L"已暂停 —— F7 继续 / Ctrl+F12 停止");
+    } else {
+        log_add(L"已继续执行");
+        set_status(L"运行中 —— 暂停:F7 / 停止:Ctrl+F12");
+    }
+    if (g_hFloat) InvalidateRect(g_hFloat, NULL, FALSE);
+}
+
 static void stop_run(void)
 {
     if (!g_running) return;
@@ -961,6 +1036,8 @@ static void stop_run(void)
 static void run_finished(WPARAM r)
 {
     g_running = 0;
+    engine_pause(0);                 /* 复位暂停态(下次运行干净开始) */
+    g_progLoop = 0;
     marks_set_visible(1);           /* 恢复屏幕标记 */
     if (g_hiddenByRun) {            /* 恢复执行期间隐藏的主窗口 */
         g_hiddenByRun = 0;
@@ -2056,6 +2133,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
         RegisterHotKey(hwnd, HOTK_STOP, MOD_CONTROL, VK_F12);
         RegisterHotKey(hwnd, HOTK_START, 0, VK_F6);
+        RegisterHotKey(hwnd, HOTK_PAUSE, 0, VK_F7);
         SetTimer(hwnd, 3, 30, NULL);          /* 按钮悬停轮询 */
         SetTimer(hwnd, 9, 60000, NULL);   /* 定时执行检查 */
 
@@ -2222,6 +2300,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (g_uiDlgActive) return 0;   /* 模态对话框打开期间忽略热键 */
         if (wp == HOTK_START) start_run();
         else if (wp == HOTK_STOP) stop_run();
+        else if (wp == HOTK_PAUSE) toggle_pause();
         return 0;
 
     case WM_APP_PROGRESS: {
@@ -2231,7 +2310,8 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if ((int)lp == g_task.startCountdown)
                 log_add(L"倒计时 %d ms,期间请勿移动鼠标…", (int)lp);
         } else {
-            _snwprintf(buf, 159, L"运行中:第 %d 轮,第 %d 步 / 共 %d 步   ——  停止:Ctrl+F12",
+            g_progLoop = (int)wp;         /* 记录当前轮次(悬浮窗进度) */
+            _snwprintf(buf, 159, L"运行中:第 %d 轮,第 %d 步 / 共 %d 步   ——  暂停:F7 / 停止:Ctrl+F12",
                        (int)wp, (int)lp + 1, g_task.count);
             wchar_t desc[160];
             step_desc(&g_task.steps[(int)lp], desc, 160);

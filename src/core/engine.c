@@ -172,11 +172,32 @@ void task_clear(Task *t)
 
 /* ---------------- 执行引擎 ---------------- */
 
-/* 可中断延时:返回 1 表示被停止 */
+/* ---------------- 暂停/恢复 ---------------- */
+
+static volatile int g_engine_pause = 0;   /* UI 线程写,引擎线程读 */
+
+void engine_pause(int on) { g_engine_pause = on; }
+int  engine_paused(void)  { return g_engine_pause; }
+
+/* 暂停挂起(步骤/延时边界调用):返回 1=请求停止 */
+static int pause_wait(const Platform *p)
+{
+    while (g_engine_pause && !*(p->stop))
+        p->sleep_ms(50);
+    return *(p->stop) != 0;
+}
+
+/* 可中断延时:返回 1 表示被停止(暂停期间挂起不计时) */
 static int esleep(const Platform *p, int ms)
 {
-    if (ms <= 0) return 0;
-    p->sleep_ms(ms);
+    if (ms <= 0) return pause_wait(p);
+    int left = ms;
+    while (left > 0) {
+        if (pause_wait(p)) return 1;
+        int n = left > 20 ? 20 : left;
+        p->sleep_ms(n);
+        left -= n;
+    }
     return *(p->stop) != 0;
 }
 
@@ -319,6 +340,7 @@ int engine_run(TaskBook *tb, int startTab, const Platform *p,
 {
     if (!tb || !p) return ENGINE_DONE;
     if (startTab < 0 || startTab >= MAX_TASKS) startTab = 0;
+    g_engine_pause = 0;                  /* 新一轮运行总是非暂停开始 */
 
     Task *base = &tb->tasks[startTab];   /* 启动任务:轮数/间隔/倒计时以它为准 */
     Task *cur = base;                    /* 当前执行任务(跨TAB跳转后切换) */
@@ -342,6 +364,7 @@ continue_loop:
         for (; i < cur->count; i++) {
             Step *s = &cur->steps[i];
             if (*(p->stop)) return ENGINE_STOP;
+            if (pause_wait(p)) return ENGINE_STOP;   /* 步骤边界挂起(暂停) */
             if (progressCb) progressCb(loop, i, ud);
 
             /* 步骤前延时(等待类型以此为时长) */
