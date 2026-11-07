@@ -1,5 +1,6 @@
 /* test_sheet.c - 解析链路测试:xlsx / csv(GBK) / 任务导出导入回环 */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../core/sheet.h"

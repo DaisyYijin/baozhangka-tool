@@ -1,5 +1,6 @@
 /* test_jump.c - 验证跳转(当前任务内 + 跨TAB)的执行序列 */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../src/core/import.h"

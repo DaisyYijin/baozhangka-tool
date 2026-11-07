@@ -1,5 +1,9 @@
 /* test_textflow.c - 验证输入步骤执行链:文本/{行}替换/数据行为空时的行为 */
 #include <stdio.h>
+#include <wchar.h>
+#ifndef _WIN32
+#define _wcsdup wcsdup
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include "../src/core/import.h"

@@ -1,5 +1,6 @@
 /* test_clickcount.c - 验证单击类步骤固定点击 1 次(即使 count 存了 3) */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../src/core/import.h"

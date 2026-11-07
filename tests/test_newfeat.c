@@ -1,5 +1,9 @@
 /* test_newfeat.c - 新功能:多列占位符 / 子流程调用返回 / 判断颜色 / 等待窗口 */
 #include <stdio.h>
+#include <wchar.h>
+#ifndef _WIN32
+#define _wcsdup wcsdup
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include "../src/core/import.h"

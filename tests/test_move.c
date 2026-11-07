@@ -1,5 +1,6 @@
 /* test_move.c - 验证 task_move_to(列表拖拽的移动逻辑) */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../src/core/import.h"

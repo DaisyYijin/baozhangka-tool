@@ -1,5 +1,6 @@
 ﻿/* test_data.c - 数据驱动回环:绑定行 → 导出 → 导入 → {行} 替换 */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../core/import.h"

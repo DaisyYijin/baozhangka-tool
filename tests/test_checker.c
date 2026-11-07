@@ -1,5 +1,6 @@
 /* test_checker.c - 四表联审核心逻辑测试 */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../src/core/import.h"

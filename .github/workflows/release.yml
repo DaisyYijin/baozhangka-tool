@@ -34,7 +34,7 @@ jobs:
           for t in tests/test_*.c; do
             name=$(basename "$t" .c)
             if [ "$name" = "test_theme" ]; then echo "skip $name (Windows 专属)"; continue; fi
-            if gcc -std=c99 -O1 -Isrc/core "$t" \
+            if gcc -std=gnu99 -O1 -Isrc/core "$t" \
                 src/core/u8.c src/core/inflate.c src/core/zip.c src/core/sheet.c \
                 src/core/engine.c src/core/ac_keys.c src/core/import.c \
                 -o "/tmp/$name" 2> "/tmp/$name.err" \

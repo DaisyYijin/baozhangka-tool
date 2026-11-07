@@ -1,5 +1,6 @@
 /* test_taskfile.c - 验证 examples/示例任务.csv 解析 */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../core/import.h"

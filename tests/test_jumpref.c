@@ -1,5 +1,6 @@
 /* test_jumpref.c - 拖拽后跳转序号同步 + 无限跳转保护 */
 #include <stdio.h>
+#include <wchar.h>
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>

@@ -1,5 +1,6 @@
 /* test_zip.c - 最小化定位:读 xlsx,列条目,解压 sharedStrings */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>

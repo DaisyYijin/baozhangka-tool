@@ -1,5 +1,6 @@
 /* test_tabname.c - 验证任务簿导出/导入的 TAB 名字列、标签数与单任务 #TAB名 */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../src/core/import.h"

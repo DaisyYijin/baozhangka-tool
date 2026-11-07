@@ -1,5 +1,6 @@
 /* test_import_mini.c - 定位 task_import_sheet 卡死 */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../core/sheet.h"

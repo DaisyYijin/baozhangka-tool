@@ -1,5 +1,6 @@
 /* test_xlsx_sheet.c - 验证多工作表枚举/按索引解析(用 examples/示例数据.xlsx) */
 #include <stdio.h>
+#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../src/core/import.h"
