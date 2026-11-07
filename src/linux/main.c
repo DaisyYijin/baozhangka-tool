@@ -451,6 +451,10 @@ static void edit_apply_type(EditBox *eb)
         int ti = xui_combo_active(eb->type);
         xui_set_text(eb->help, ti >= 0 ? EDIT_TYPES[ti].help : "");
     }
+    /* 文本行标签按类型切换(找图条件/XLSIF条件用专属文案) */
+    xui_set_text(eb->lb_text, xlsif ?
+                 "\xe6\x9d\xa1\xe4\xbb\xb6(\xe5\x80\xbc=>\xe6\xad\xa5\xe9\xaa\xa4):" :      /* 条件(值=>步骤): */
+                 "\xe8\xbe\x93\xe5\x85\xa5\xe5\x86\x85\xe5\xae\xb9:");                     /* 输入内容: */
     xui_show(eb->clear, type == ACT_TEXT);
     xui_show(eb->lb_scroll, scroll);
     xui_show(eb->scroll, scroll);
@@ -632,7 +636,7 @@ static int edit_step_dialog(Step *s, int isNew)
 
     y += 36;
     eb.lb_wh = xui_label(dlg, L, y + 2, W1, EH,
-                         "\xe6\x90\x9c\xe7\xb4\xa2\xe5\x8c\xba W/H(0=\xe5\x85\xa8\xe5\xb1\x8f):");  /* 搜索区 W/H(0=全屏): */
+                         "\xe6\x90\x9c\xe7\xb4\xa2\xe5\x8c\xba W/H:");  /* 搜索区 W/H: */
     eb.w = xui_entry(dlg, L + W1 + 6, y, 70, EH, ws);
     eb.h = xui_entry(dlg, L + W1 + 82, y, 70, EH, hs);
 
@@ -662,7 +666,7 @@ static int edit_step_dialog(Step *s, int isNew)
 
     y += 36;
     eb.lb_miss = xui_label(dlg, L, y + 2, W1, EH,
-                           "\xe6\x9c\xaa\xe6\x89\xbe\xe5\x88\xb0\xe8\xb7\xb3\xe8\xbd\xac(0=\xe7\xbb\xa7\xe7\xbb\xad):");  /* 未找到跳转(0=继续): */
+                           "\xe6\x9c\xaa\xe6\x89\xbe\xe5\x88\xb0\xe8\xb7\xb3\xe8\xbd\xac:");  /* 未找到跳转: */
     eb.miss = xui_entry(dlg, L + W1 + 6, y, 70, EH, missS);
 
     y += 36;

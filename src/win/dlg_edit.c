@@ -214,7 +214,8 @@ static const wchar_t *const TYPE_HELP[ACT_TYPE_COUNT_] = {
     L"先点「≡ 框选模板」在屏幕上拖动框选要查找的图块,执行时自动搜索:\n"
     L"动作:0=只定位到该处,1=单击它,2=双击它;「找到则跳转」可跳步骤;\n"
     L"「未找到跳转」常用于先去点开下拉菜单再回来找;\n"
-    L"容差越大越宽松,找不到时可调大试试(默认 20)。",
+    L"容差越大越宽松,找不到时可调大试试(默认 20);\n"
+    L"搜索区宽/高填 0 = 全屏搜索(默认)。",
     /* ACT_XLSIF Excel判断 */
     L"读取 Excel 当前行指定列的文字,按条件跳到不同步骤:\n"
     L"条件写法:文字=>步骤号,多个条件用逗号分开。\n"
@@ -312,7 +313,7 @@ static void layout_rows(int type)
                      type == ACT_TEXT ? L"输入内容" :
                      type == ACT_WAITWIN ? L"窗口标题包含" :
                      type == ACT_OCR ? L"关键词" :
-                     type == ACT_XLSIF ? L"条件(值=>步骤,…)" : L"按键组合");
+                     type == ACT_XLSIF ? L"条件(值=>步骤)" : L"按键组合");
         show_ctl(IDC_LB_TEXT, 1);
         show_ctl(IDC_TEXT, 1);
         place(IDC_LB_TEXT, LB_X, y + 2, LB_W, 20);
@@ -368,7 +369,7 @@ static void layout_rows(int type)
         place(IDC_W, CT_X, y, 56, 22);
         place(IDC_H, CT_X + 64, y, 56, 22);
         set_ctl_text(IDC_LB_W,
-                     type == ACT_FINDIMG ? L"搜索区 W/H(0=全屏)" : L"区域 W / H");
+                     type == ACT_FINDIMG ? L"搜索区 W/H" : L"区域 W / H");
         y += ROW_H;
     } else {
         show_ctl(IDC_LB_W, 0);
