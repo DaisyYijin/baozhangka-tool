@@ -575,18 +575,19 @@ static void toggle_pause(void);
 static void float_update(const wchar_t *text);
 static void float_toggle(void);
 
-#define FLT_W 280
-#define FLT_H 76
-/* 第一行:状态+进度;第二行(y=FLT_ROW2_Y 起):4 个按钮 */
-#define FLT_ROW2_Y  38
-#define FLT_BTN_H   26
+#define FLT_W 336
+#define FLT_H 84
+/* 第一行:状态圆点+进度;第二行(y=FLT_ROW2_Y 起):4 个按钮 */
+#define FLT_ROW2_Y  42
+#define FLT_BTN_H   28
 
 static void flt_btn_rect(int i, RECT *rc)
 {
-    static const int bw[4] = { 58, 58, 58, 70 };   /* 开始/暂停/继续/停止 */
-    int x = 12;
-    for (int k = 0; k < i; k++) x += bw[k] + 4;
-    SetRect(rc, x, FLT_ROW2_Y + 6, x + bw[i], FLT_ROW2_Y + 6 + FLT_BTN_H);
+    static const int bw[4] = { 64, 64, 64, 80 };   /* 开始/暂停/继续/停止 */
+    int total = 64 * 3 + 80 + 6 * 3;               /* 按钮+间距 */
+    int x = (FLT_W - total) / 2;
+    for (int k = 0; k < i; k++) x += bw[k] + 6;
+    SetRect(rc, x, FLT_ROW2_Y + 8, x + bw[i], FLT_ROW2_Y + 8 + FLT_BTN_H);
 }
 
 static int flt_btn_enabled(int i)
@@ -642,15 +643,15 @@ static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         HBITMAP bmp = CreateCompatibleBitmap(dc, rc.right, rc.bottom);
         HGDIOBJ oldBmp = SelectObject(mem, bmp);
 
-        /* 白色圆角卡片 + 浅描边 */
+        /* 白色圆角卡片 + 柔和描边 */
         HBRUSH brBg = CreateSolidBrush(CARD_BG);
         FillRect(mem, &rc, brBg);
         DeleteObject(brBg);
-        HBRUSH brEdge = CreateSolidBrush(RGB(0xD9,0xD9,0xD9));
-        HPEN pen = CreatePen(PS_SOLID, 1, RGB(0xD9,0xD9,0xD9));
+        HBRUSH brEdge = CreateSolidBrush(RGB(0xE4,0xE4,0xE4));
+        HPEN pen = CreatePen(PS_SOLID, 1, RGB(0xE4,0xE4,0xE4));
         HGDIOBJ op = SelectObject(mem, pen);
         HGDIOBJ ob = SelectObject(mem, brEdge);
-        RoundRect(mem, rc.left, rc.top, rc.right, rc.bottom, 10, 10);
+        RoundRect(mem, rc.left, rc.top, rc.right, rc.bottom, 14, 14);
         SelectObject(mem, op);
         SelectObject(mem, ob);
         DeleteObject(brEdge);
@@ -658,45 +659,60 @@ static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
         SetBkMode(mem, TRANSPARENT);
 
-        /* 第一行:状态 + 进度(空闲/倒计时/Excel 行进度) */
+        /* 第一行:状态圆点 + 进度文字(主界面字体) */
         {
             wchar_t line[96];
             flt_status_text(line, 96);
+            int run = g_running, pa = run && engine_paused();
+            COLORREF dotCol = !run ? RGB(0xB9,0xB9,0xB9) :
+                              pa  ? RGB(0xE8,0x93,0x0C) :
+                                    RGB(0x30,0xA8,0x53);
+            HBRUSH brD = CreateSolidBrush(dotCol);
+            HPEN penD = CreatePen(PS_SOLID, 1, dotCol);
+            HGDIOBJ opd = SelectObject(mem, penD);
+            HGDIOBJ obd = SelectObject(mem, brD);
+            Ellipse(mem, 16, 16, 25, 26);          /* 9px 状态圆点 */
+            SelectObject(mem, opd);
+            SelectObject(mem, obd);
+            DeleteObject(brD);
+            DeleteObject(penD);
+
             HGDIOBJ of = SelectObject(mem, g_uiFontBold);
-            SetTextColor(mem, !g_running ? RGB(0x44,0x44,0x44) :
-                         engine_paused() ? RGB(0xC0,0x70,0x10) : QQ_BLUE);
-            RECT rt = { 12, 4, FLT_W - 12, FLT_ROW2_Y };
+            SetTextColor(mem, !run ? RGB(0x44,0x44,0x44) :
+                         pa ? RGB(0xC0,0x70,0x10) : QQ_BLUE);
+            RECT rt = { 34, 2, FLT_W - 14, FLT_ROW2_Y };
             DrawTextW(mem, line, -1, &rt,
                       DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
             SelectObject(mem, of);
         }
 
-        /* 第二行:开始/暂停/继续/停止(带快捷键标注,按状态置灰) */
+        /* 第二行:开始/暂停/继续/停止(圆角按钮,主界面字体,按状态置灰) */
         {
             static const wchar_t *btnTxt[4] = {
                 L"开始 F6", L"暂停 F7", L"继续 F7", L"停止 ^F12"
             };
+            HGDIOBJ ofb = SelectObject(mem, g_uiFont);
             for (int i = 0; i < 4; i++) {
                 RECT rb; flt_btn_rect(i, &rb);
                 int en = flt_btn_enabled(i);
-                COLORREF col = !en ? RGB(0xC6,0xC6,0xC6) :
-                               i == 0 ? QQ_BLUE :
-                               i == 1 ? RGB(0xD9,0x8A,0x1E) :
-                               i == 2 ? RGB(0x2E,0x9E,0x4F) :
+                COLORREF col = i == 0 ? QQ_BLUE :
+                               i == 1 ? RGB(0xE8,0x93,0x0C) :
+                               i == 2 ? RGB(0x30,0xA8,0x53) :
                                         RGB(0xE0,0x4A,0x3E);
-                HBRUSH brB = CreateSolidBrush(col);
-                HPEN penB = CreatePen(PS_SOLID, 1, col);
+                HBRUSH brB = CreateSolidBrush(en ? col : RGB(0xEA,0xEA,0xEA));
+                HPEN penB = CreatePen(PS_SOLID, 1, en ? col : RGB(0xE0,0xE0,0xE0));
                 HGDIOBJ opb = SelectObject(mem, penB);
                 HGDIOBJ obb = SelectObject(mem, brB);
-                Rectangle(mem, rb.left, rb.top, rb.right, rb.bottom);
+                RoundRect(mem, rb.left, rb.top, rb.right, rb.bottom, 7, 7);
                 SelectObject(mem, opb);
                 SelectObject(mem, obb);
                 DeleteObject(brB);
                 DeleteObject(penB);
-                SetTextColor(mem, RGB(255,255,255));
+                SetTextColor(mem, en ? RGB(255,255,255) : RGB(0xA8,0xA8,0xA8));
                 DrawTextW(mem, btnTxt[i], -1, &rb,
                           DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
+            SelectObject(mem, ofb);
         }
 
         BitBlt(dc, 0, 0, rc.right, rc.bottom, mem, 0, 0, SRCCOPY);
