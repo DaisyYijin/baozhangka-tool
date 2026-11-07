@@ -21,9 +21,22 @@ typedef struct {
     POINT   press;                   /* 按下点(屏幕坐标) */
     POINT   cur;                     /* 当前光标 */
     PickResult result;
+    HDC     memDC;                   /* 双缓冲缓存(整屏位图只分配一次) */
+    HBITMAP memBmp;
 } Picker;
 
 static Picker g_picker;
+
+/* 跟随鼠标的信息框位置(客户区坐标) */
+static void tip_rect(Picker *p, int cx, int cy, RECT *rc)
+{
+    int tx = cx + 18, ty = cy + 18;
+    if (tx > p->vw - 340) tx = p->vw - 340;
+    if (ty > p->vh - 60) ty = p->vh - 60;
+    if (tx < 0) tx = 0;
+    if (ty < 0) ty = 0;
+    SetRect(rc, tx, ty, tx + 330, ty + 22);
+}
 
 static void draw_picker(HDC hdc)
 {
@@ -68,12 +81,8 @@ static void draw_picker(HDC hdc)
     }
 
     /* 跟随鼠标的信息框 */
-    int tx = cx + 18, ty = cy + 18;
-    if (tx > p->vw - 340) tx = p->vw - 340;
-    if (ty > p->vh - 60) ty = p->vh - 60;
-    if (tx < 0) tx = 0;
-    if (ty < 0) ty = 0;
-    RECT rcTip = { tx, ty, tx + 330, ty + 22 };
+    RECT rcTip;
+    tip_rect(p, cx, cy, &rcTip);
     HBRUSH brTip = CreateSolidBrush(RGB(255, 255, 200));
     FillRect(hdc, &rcTip, brTip);
     DeleteObject(brTip);
@@ -100,38 +109,67 @@ static LRESULT CALLBACK picker_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
-        /* 双缓冲:先画到内存位图再一次性拷贝,消除闪烁与拖影 */
-        HDC mem = CreateCompatibleDC(hdc);
-        HBITMAP bmp = CreateCompatibleBitmap(hdc, p->vw, p->vh);
-        HGDIOBJ oldBmp = SelectObject(mem, bmp);
+        /* 双缓冲:整屏位图只分配一次,每帧复用;只把脏区拷到屏幕 */
+        if (!p->memDC) {
+            p->memDC = CreateCompatibleDC(hdc);
+            p->memBmp = CreateCompatibleBitmap(hdc, p->vw, p->vh);
+            SelectObject(p->memDC, p->memBmp);
+        }
         RECT full = { 0, 0, p->vw, p->vh };
-        FillRect(mem, &full, (HBRUSH)GetStockObject(BLACK_BRUSH));
-        draw_picker(mem);
-        BitBlt(hdc, 0, 0, p->vw, p->vh, mem, 0, 0, SRCCOPY);
-        SelectObject(mem, oldBmp);
-        DeleteObject(bmp);
-        DeleteDC(mem);
+        FillRect(p->memDC, &full, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        draw_picker(p->memDC);
+        int pw = ps.rcPaint.right - ps.rcPaint.left;
+        int ph = ps.rcPaint.bottom - ps.rcPaint.top;
+        if (pw > 0 && ph > 0)
+            BitBlt(hdc, ps.rcPaint.left, ps.rcPaint.top, pw, ph,
+                   p->memDC, ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
         EndPaint(hwnd, &ps);
         return 0;
     }
     case WM_ERASEBKGND:
         return 1;   /* 背景由双缓冲统一绘制,禁止系统擦除 */
-    case WM_TIMER:
-        GetCursorPos(&p->cur);
-        InvalidateRect(hwnd, NULL, TRUE);
-        return 0;
     case WM_LBUTTONDOWN:
         SetCapture(hwnd);
         GetCursorPos(&p->press);
         p->cur = p->press;
         p->dragging = 1;
         return 0;
-    case WM_MOUSEMOVE:
-        if (p->dragging) {
-            GetCursorPos(&p->cur);
-            InvalidateRect(hwnd, NULL, TRUE);
+    case WM_MOUSEMOVE: {
+        /* 实时跟随:每次移动立刻局部重绘(旧/新十字线条带+信息框+拖拽框),
+           不再依赖定时器轮询 */
+        POINT np;
+        GetCursorPos(&np);
+        if (np.x == p->cur.x && np.y == p->cur.y) return 0;
+        int ocx = p->cur.x - p->vx, ocy = p->cur.y - p->vy;
+        int ncx = np.x - p->vx, ncy = np.y - p->vy;
+        RECT rc, tOld, tNew;
+        SetRect(&rc, ocx - 2, 0, ocx + 3, p->vh);
+        InvalidateRect(hwnd, &rc, FALSE);
+        SetRect(&rc, 0, ocy - 2, p->vw, ocy + 3);
+        InvalidateRect(hwnd, &rc, FALSE);
+        SetRect(&rc, ncx - 2, 0, ncx + 3, p->vh);
+        InvalidateRect(hwnd, &rc, FALSE);
+        SetRect(&rc, 0, ncy - 2, p->vw, ncy + 3);
+        InvalidateRect(hwnd, &rc, FALSE);
+        tip_rect(p, ocx, ocy, &tOld);
+        tip_rect(p, ncx, ncy, &tNew);
+        InvalidateRect(hwnd, &tOld, FALSE);
+        InvalidateRect(hwnd, &tNew, FALSE);
+        if (p->dragging) {                   /* 旧/新拖拽框边框 */
+            int x1 = p->press.x - p->vx, y1 = p->press.y - p->vy;
+            RECT r1, r2;
+            SetRect(&r1, x1 < ocx ? x1 : ocx, y1 < ocy ? y1 : ocy,
+                    (x1 > ocx ? x1 : ocx) + 1, (y1 > ocy ? y1 : ocy) + 1);
+            SetRect(&r2, x1 < ncx ? x1 : ncx, y1 < ncy ? y1 : ncy,
+                    (x1 > ncx ? x1 : ncx) + 1, (y1 > ncy ? y1 : ncy) + 1);
+            InflateRect(&r1, 3, 3);
+            InflateRect(&r2, 3, 3);
+            InvalidateRect(hwnd, &r1, FALSE);
+            InvalidateRect(hwnd, &r2, FALSE);
         }
+        p->cur = np;
         return 0;
+    }
     case WM_LBUTTONUP: {
         ReleaseCapture();
         GetCursorPos(&p->cur);
@@ -173,6 +211,8 @@ static LRESULT CALLBACK picker_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         p->done = 1;
         return 0;
     case WM_DESTROY:
+        if (p->memDC) { DeleteDC(p->memDC); p->memDC = NULL; }
+        if (p->memBmp) { DeleteObject(p->memBmp); p->memBmp = NULL; }
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -206,11 +246,11 @@ int pick_screen_point(PickResult *r)
     if (!p->hwnd) return 0;
 
     SetLayeredWindowAttributes(p->hwnd, 0, 72, LWA_ALPHA);
+    GetCursorPos(&p->cur);            /* 十字线立即出现在鼠标处 */
     ShowWindow(p->hwnd, SW_SHOW);
     UpdateWindow(p->hwnd);
     SetForegroundWindow(p->hwnd);
     SetFocus(p->hwnd);
-    SetTimer(p->hwnd, 1, 40, NULL);
 
     /* 独立消息循环 */
     MSG msg;
@@ -227,7 +267,6 @@ int pick_screen_point(PickResult *r)
         }
     }
 
-    KillTimer(p->hwnd, 1);
     DestroyWindow(p->hwnd);
     UnregisterClassW(PICKER_CLASS, wc.hInstance);
 

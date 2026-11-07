@@ -429,7 +429,7 @@ static void do_pick(int which)
 {
     PickResult r;
     ShowWindow(g_edit.hwnd, SW_HIDE);
-    Sleep(150);
+    Sleep(60);
     int got = pick_screen_point(&r);
     ShowWindow(g_edit.hwnd, SW_SHOW);
     SetForegroundWindow(g_edit.hwnd);
@@ -471,7 +471,7 @@ static void do_pick_tpl(void)
 {
     PickResult r;
     ShowWindow(g_edit.hwnd, SW_HIDE);
-    Sleep(150);
+    Sleep(60);
     int got = pick_screen_point(&r);
     ShowWindow(g_edit.hwnd, SW_SHOW);
     SetForegroundWindow(g_edit.hwnd);
