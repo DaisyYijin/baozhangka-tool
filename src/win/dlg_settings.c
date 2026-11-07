@@ -14,7 +14,7 @@
 
 static const wchar_t SET_DLG_CLASS[] = L"AcSettingsDlg";
 #define SET_W 400
-#define SET_H 400
+#define SET_H 360
 
 #define SID_OK      1
 #define SID_CANCEL  2
@@ -51,11 +51,9 @@ static const struct { int vk; const wchar_t *label; } HK_OPTIONS[] = {
 
 static struct {
     HWND hwnd, ok, cancel;
-    HWND chkFloat, chkPick;
     HWND hkFloat, hkPause, hkStop;
     int done, result;
     COLORREF theme;
-    int showFloat, showPick;
     int hkFloatVk, hkPauseVk, hkStopVk;
 } g_st;
 
@@ -136,20 +134,23 @@ static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             SelectObject(dc, of2);
         }
 
-        /* ---- 标题:快捷按钮 ---- */
+        /* ---- 标题:全局快捷键 ---- */
         of = SelectObject(dc, g_uiFontBold);
         SetTextColor(dc, RGB(0x2E,0x2E,0x2E));
-        TextOutW(dc, 16, 130, L"\x5FEB\x6377\x6309\x94AE", 4);
-        /* ---- 标题:快捷键 ---- */
-        TextOutW(dc, 16, 190, L"\x5168\x5C40\x5FEB\x6377\x952E", 5);
+        TextOutW(dc, 16, 138, L"\x5168\x5C40\x5FEB\x6377\x952E", 5);
         /* ---- 标题:更多设置 ---- */
-        TextOutW(dc, 16, 270, L"\x66F4\x591A\x8BBE\x7F6E\xFF08\x9884\x7559\xFF09", 8);
+        TextOutW(dc, 16, 266, L"\x66F4\x591A\x8BBE\x7F6E\xFF08\x9884\x7559\xFF09", 8);
         SelectObject(dc, of);
 
-        /* 预留区说明 */
+        /* 快捷键说明(两行,浅灰小字) */
         HGDIOBJ of3 = SelectObject(dc, g_uiFont);
         SetTextColor(dc, RGB(0x8A,0x8A,0x8A));
-        TextOutW(dc, 16, 290,
+        TextOutW(dc, 20, 232,
+                 L"\x5F00\x59CB=\x542F\x52A8\x4EFB\x52A1\x20\x20\x6682\x505C=\x6682\x505C/\x7EE7\x7EED\x20\x20\x505C\x6B62=Ctrl+\x6240\x9009\x952E", 24); /* 开始=启动任务  暂停=暂停/继续  停止=Ctrl+所选键 */
+        TextOutW(dc, 20, 250,
+                 L"\x4FEE\x6539\x540E\x70B9\x300C\x786E\x5B9A\x300D\x7ACB\x5373\x751F\x6548\xFF0C\x65E0\x9700\x91CD\x542F", 17); /* 修改后点「确定」立即生效,无需重启 */
+        /* 预留区说明 */
+        TextOutW(dc, 16, 286,
                  L"\x540E\x7EED\x7248\x672C\x5C06\x5728\x6B64\x589E\x52A0\x66F4\x591A\x914D\x7F6E\x9879", 15);
         SelectObject(dc, of3);
 
@@ -173,8 +174,6 @@ static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_COMMAND: {
         int id = LOWORD(wp);
         if (id == SID_OK) {
-            g_st.showFloat = (SendMessageW(g_st.chkFloat, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            g_st.showPick  = (SendMessageW(g_st.chkPick,  BM_GETCHECK, 0, 0) == BST_CHECKED);
             int sf = (int)SendMessageW(g_st.hkFloat, CB_GETCURSEL, 0, 0);
             int sp = (int)SendMessageW(g_st.hkPause, CB_GETCURSEL, 0, 0);
             int ss = (int)SendMessageW(g_st.hkStop,  CB_GETCURSEL, 0, 0);
@@ -202,8 +201,6 @@ int settings_dialog(HWND owner)
 {
     memset(&g_st, 0, sizeof(g_st));
     g_st.theme = ThemeColor();
-    g_st.showFloat = settings_show_float_btn();
-    g_st.showPick = settings_show_quick_pick();
     g_st.hkFloatVk = settings_float_hotkey();
     g_st.hkPauseVk = settings_pause_hotkey();
     g_st.hkStopVk  = settings_stop_hotkey();
@@ -231,19 +228,7 @@ int settings_dialog(HWND owner)
         owner, NULL, wc.hInstance, NULL);
     if (!g_st.hwnd) return 0;
 
-    /* --- 快捷按钮开关(y=140 区) --- */
-    g_st.chkFloat = CreateWindowExW(0, L"BUTTON",
-        L"\x4FA7\x680F\x663E\x793A\x300C\x60AC\x6D6E\x7A97\x300D\x6309\x94AE",
-        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-        20, 148, 350, 22, g_st.hwnd, (HMENU)SID_CHK_FLOAT, wc.hInstance, NULL);
-    g_st.chkPick = CreateWindowExW(0, L"BUTTON",
-        L"\x4FA7\x680F\x663E\x793A\x300C\x5C4F\x5E55\x53D6\x70B9\x300D\x6309\x94AE",
-        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-        20, 172, 350, 22, g_st.hwnd, (HMENU)SID_CHK_PICK, wc.hInstance, NULL);
-    SendMessageW(g_st.chkFloat, BM_SETCHECK, g_st.showFloat ? BST_CHECKED : BST_UNCHECKED, 0);
-    SendMessageW(g_st.chkPick,  BM_SETCHECK, g_st.showPick  ? BST_CHECKED : BST_UNCHECKED, 0);
-
-    /* --- 全局快捷键(y=210 区,三行下拉) --- */
+    /* --- 全局快捷键(y=158 区,三行下拉) --- */
     static const struct { const wchar_t *lbl; int defIdx; int id; } hkRows[] = {
         { L"\x5F00\x59CB\x952E:",  1, SID_HK_FLOAT },   /* 开始键: */
         { L"\x6682\x505C\x952E:",  2, SID_HK_PAUSE },   /* 暂停键: */
@@ -253,11 +238,11 @@ int settings_dialog(HWND owner)
     int *hkVals[]   = { &g_st.hkFloatVk, &g_st.hkPauseVk, &g_st.hkStopVk };
     for (int r = 0; r < 3; r++) {
         CreateWindowExW(0, L"STATIC", hkRows[r].lbl,
-            WS_CHILD | WS_VISIBLE, 20, 210 + r * 26, 60, 20,
+            WS_CHILD | WS_VISIBLE, 20, 158 + r * 26, 60, 20,
             g_st.hwnd, NULL, wc.hInstance, NULL);
         *hkHwnds[r] = CreateWindowExW(0, L"COMBOBOX", L"",
             CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE | WS_VSCROLL,
-            88, 207 + r * 26, 110, 250,
+            88, 155 + r * 26, 110, 250,
             g_st.hwnd, (HMENU)hkRows[r].id, wc.hInstance, NULL);
         for (int i = 0; i < HK_OPT_N; i++) {
             SendMessageW(*hkHwnds[r], CB_ADDSTRING, 0, (LPARAM)HK_OPTIONS[i].label);
@@ -279,8 +264,7 @@ int settings_dialog(HWND owner)
         SET_W - 100, SET_H - 62, 80, 30, g_st.hwnd, (HMENU)SID_CANCEL, wc.hInstance, NULL);
 
     if (g_uiFont) {
-        HWND kids[] = { g_st.chkFloat, g_st.chkPick,
-                        g_st.hkFloat, g_st.hkPause, g_st.hkStop,
+        HWND kids[] = { g_st.hkFloat, g_st.hkPause, g_st.hkStop,
                         g_st.ok, g_st.cancel, NULL };
         for (int i = 0; kids[i]; i++)
             SendMessageW(kids[i], WM_SETFONT, (WPARAM)g_uiFont, TRUE);

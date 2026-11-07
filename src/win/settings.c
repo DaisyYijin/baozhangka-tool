@@ -9,8 +9,6 @@
 
 /* ---- 运行时状态 ---- */
 static COLORREF g_themeColor = RGB(0x00, 0x99, 0xFF);   /* 默认主题蓝 */
-static int g_showFloatBtn  = 1;    /* 侧栏「悬浮窗」快捷按钮 */
-static int g_showQuickPick = 1;    /* 侧栏「取点」快捷按钮 */
 static int g_floatHotkey = VK_F6;  /* 开始快捷键 */
 static int g_pauseHotkey = VK_F7;  /* 暂停/继续快捷键 */
 static int g_stopHotkey  = VK_F12; /* 停止快捷键(修饰固定 Ctrl) */
@@ -46,8 +44,6 @@ void settings_load(void)
     unsigned v = 0;
     if (swscanf(buf, L"%x", &v) == 1)
         g_themeColor = RGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
-    g_showFloatBtn  = GetPrivateProfileIntW(L"quick", L"showFloatBtn", 1, g_iniPath);
-    g_showQuickPick = GetPrivateProfileIntW(L"quick", L"showQuickPick", 1, g_iniPath);
     g_floatHotkey   = GetPrivateProfileIntW(L"hotkey", L"floatVk", VK_F6, g_iniPath);
     g_pauseHotkey   = GetPrivateProfileIntW(L"hotkey", L"pauseVk", VK_F7, g_iniPath);
     g_stopHotkey    = GetPrivateProfileIntW(L"hotkey", L"stopVk", VK_F12, g_iniPath);
@@ -60,10 +56,6 @@ void settings_save(void)
     swprintf(buf, 32, L"%02X%02X%02X",
              (g_themeColor >> 16) & 0xFF, (g_themeColor >> 8) & 0xFF, g_themeColor & 0xFF);
     WritePrivateProfileStringW(L"ui", L"theme", buf, g_iniPath);
-    swprintf(buf, 32, L"%d", g_showFloatBtn);
-    WritePrivateProfileStringW(L"quick", L"showFloatBtn", buf, g_iniPath);
-    swprintf(buf, 32, L"%d", g_showQuickPick);
-    WritePrivateProfileStringW(L"quick", L"showQuickPick", buf, g_iniPath);
     swprintf(buf, 32, L"%d", g_floatHotkey);
     WritePrivateProfileStringW(L"hotkey", L"floatVk", buf, g_iniPath);
     swprintf(buf, 32, L"%d", g_pauseHotkey);
@@ -73,18 +65,10 @@ void settings_save(void)
 }
 
 COLORREF ThemeColor(void) { return g_themeColor; }
-int settings_show_float_btn(void)   { return g_showFloatBtn; }
-int settings_show_quick_pick(void)  { return g_showQuickPick; }
 
 void settings_set_theme_color(COLORREF c)
 {
     g_themeColor = c;
-    settings_save();
-}
-void settings_set_quick(int showFloatBtn, int showQuickPick)
-{
-    g_showFloatBtn = showFloatBtn;
-    g_showQuickPick = showQuickPick;
     settings_save();
 }
 

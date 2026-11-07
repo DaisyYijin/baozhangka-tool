@@ -19,12 +19,7 @@ int settings_dialog(HWND owner);   /* 设置对话框(模态);返回1=有变更�
 void settings_set_theme_color(COLORREF c);      /* 保存并即时生效 */
 const COLORREF *settings_theme_presets(int *n); /* 预设色板(当前 8 色) */
 
-/* 快捷按钮显隐(侧栏) */
-int settings_show_float_btn(void);
-int settings_show_quick_pick(void);
-void settings_set_quick(int showFloatBtn, int showQuickPick);
-
-/* 悬浮窗快捷键(可配置,默认 F6/Ctrl+F12) */
+/* 悬浮窗快捷键(可配置,默认 F6/F7/Ctrl+F12) */
 int settings_float_hotkey(void);       /* 返回 VK_xx */
 int settings_pause_hotkey(void);       /* 返回 VK_xx */
 int settings_stop_hotkey(void);        /* 返回 VK_xx(修饰固定 Ctrl) */

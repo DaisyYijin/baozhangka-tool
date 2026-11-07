@@ -583,10 +583,7 @@ static void float_toggle(void);
    (定义在此:g_hMain 与 g_hFloat 均已可见) */
 static void settings_apply_ui(void)
 {
-    HWND hF = GetDlgItem(g_hMain, IDC_BTN_FLOAT);
-    HWND hP = GetDlgItem(g_hMain, IDC_BTN_PICK);
-    if (hF) ShowWindow(hF, settings_show_float_btn() ? SW_SHOW : SW_HIDE);
-    if (hP) ShowWindow(hP, settings_show_quick_pick() ? SW_SHOW : SW_HIDE);
+    /* 快捷按钮已按需求移除;仅主题色重绘 */
     InvalidateRect(g_hMain, NULL, TRUE);
     if (g_hFloat && IsWindowVisible(g_hFloat)) InvalidateRect(g_hFloat, NULL, FALSE);
 }
@@ -1811,11 +1808,7 @@ static void layout_children(int cx, int cy)
     MoveWindow(g_hBtn[2], mx + 484, gy, 52, 22, TRUE);
     MoveWindow(GetDlgItem(g_hMain, IDC_LB4), mx + 588, gy + 4, 78, 20, TRUE);
     MoveWindow(g_hBtn[3], mx + 670, gy, 52, 22, TRUE);
-    /* 悬浮窗开关:紧随设置行,与输入框垂直对齐 */
-    MoveWindow(GetDlgItem(g_hMain, IDC_BTN_FLOAT), mx + 736, gy - 1, 88, 24, TRUE);
-
-
-    /* TAB 行(只显示 g_tabCount 个 + ＋按钮;删除用 TAB 内嵌 ×) */
+    /* 快捷按钮(悬浮窗)已按需求移除;TAB 行(只显示 g_tabCount 个 + ＋按钮;删除用 TAB 内嵌 ×) */
     {
         int tx = mx;
         for (int i = 0; i < MAX_TASKS; i++) {
@@ -2080,12 +2073,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
         }
 
-        /* ---- 主区顶部(无标题) ---- */
-
-        /* 悬浮窗开关:与设置行对齐 */
-        HWND btnFloat = mk(L"BUTTON", L"悬浮窗", BS_OWNERDRAW, 0, 0, 88, 24, IDC_BTN_FLOAT);
-        (void)btnFloat;
-
+        /* ---- 主区顶部(无标题;快捷按钮已按需求移除) ---- */
 
         /* ---- 步骤 TAB 行(动态:默认1个,可添加到8个;删除点 TAB 内嵌 ×;双击重命名) ---- */
         for (int i = 0; i < MAX_TASKS; i++) {
@@ -2242,7 +2230,6 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     draw_accent_button(dis, ThemeColor(), RGB(0x33,0xAA,0xFF), RGB(0x00,0x7A,0xD4), FALSE);
                 return TRUE;
             case IDC_BTN_LOGCLEAR:
-            case IDC_BTN_FLOAT:
                 draw_flat_button(dis);
                 return TRUE;
             default:
@@ -2308,10 +2295,6 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             HWND newHot = NULL;
             for (int i = 4; i <= 14; i++)
                 if (g_hBtn[i] && under == g_hBtn[i]) { newHot = g_hBtn[i]; break; }
-            if (!newHot) {
-                HWND floatBtn = GetDlgItem(g_hMain, IDC_BTN_FLOAT);
-                if (floatBtn && under == floatBtn) newHot = floatBtn;
-            }
             if (!newHot && g_page == 0) {
                 for (int i = 0; i < MAX_TASKS; i++)
                     if (g_hTabs[i] && under == g_hTabs[i]) { newHot = g_hTabs[i]; break; }
@@ -2499,7 +2482,6 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case IDC_CHK_EXCELROWS:
             apply_excel_rows_check(hwnd);
             return 0;
-        case IDC_BTN_FLOAT:  float_toggle(); return 0;
 
         /* TAB:点主体切换;点右侧内嵌 × 删除该步骤;双击重命名 */
         case IDC_TAB_BASE:   case IDC_TAB_BASE+1:  case IDC_TAB_BASE+2:
