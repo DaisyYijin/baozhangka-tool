@@ -11,7 +11,8 @@
 static COLORREF g_themeColor = RGB(0x00, 0x99, 0xFF);   /* 默认主题蓝 */
 static int g_showFloatBtn  = 1;    /* 侧栏「悬浮窗」快捷按钮 */
 static int g_showQuickPick = 1;    /* 侧栏「取点」快捷按钮 */
-static int g_floatHotkey = VK_F6;  /* 悬浮窗/主程序开始快捷键 */
+static int g_floatHotkey = VK_F6;  /* 开始快捷键 */
+static int g_pauseHotkey = VK_F7;  /* 暂停/继续快捷键 */
 static int g_stopHotkey  = VK_F12; /* 停止快捷键(修饰固定 Ctrl) */
 
 static wchar_t g_iniPath[MAX_PATH];
@@ -48,6 +49,7 @@ void settings_load(void)
     g_showFloatBtn  = GetPrivateProfileIntW(L"quick", L"showFloatBtn", 1, g_iniPath);
     g_showQuickPick = GetPrivateProfileIntW(L"quick", L"showQuickPick", 1, g_iniPath);
     g_floatHotkey   = GetPrivateProfileIntW(L"hotkey", L"floatVk", VK_F6, g_iniPath);
+    g_pauseHotkey   = GetPrivateProfileIntW(L"hotkey", L"pauseVk", VK_F7, g_iniPath);
     g_stopHotkey    = GetPrivateProfileIntW(L"hotkey", L"stopVk", VK_F12, g_iniPath);
 }
 
@@ -64,6 +66,8 @@ void settings_save(void)
     WritePrivateProfileStringW(L"quick", L"showQuickPick", buf, g_iniPath);
     swprintf(buf, 32, L"%d", g_floatHotkey);
     WritePrivateProfileStringW(L"hotkey", L"floatVk", buf, g_iniPath);
+    swprintf(buf, 32, L"%d", g_pauseHotkey);
+    WritePrivateProfileStringW(L"hotkey", L"pauseVk", buf, g_iniPath);
     swprintf(buf, 32, L"%d", g_stopHotkey);
     WritePrivateProfileStringW(L"hotkey", L"stopVk", buf, g_iniPath);
 }
@@ -91,11 +95,13 @@ const COLORREF *settings_theme_presets(int *n)
 }
 
 int settings_float_hotkey(void) { return g_floatHotkey; }
+int settings_pause_hotkey(void) { return g_pauseHotkey; }
 int settings_stop_hotkey(void)  { return g_stopHotkey; }
 
-void settings_set_hotkeys(int floatVk, int stopVk)
+void settings_set_hotkeys(int floatVk, int pauseVk, int stopVk)
 {
     if (floatVk) g_floatHotkey = floatVk;
+    if (pauseVk) g_pauseHotkey = pauseVk;
     if (stopVk)  g_stopHotkey  = stopVk;
     settings_save();
 }
