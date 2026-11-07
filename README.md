@@ -9,7 +9,7 @@
 | Release 产物 | 系统 | 架构 | 说明 |
 |---|---|---|---|
 | `baozhangka-tool-windows-xp-x86.zip` | **Windows XP SP3** ~ Win11 | x86(32 位) | 零依赖单文件 exe,Win7/10/11 的 32/64 位通用 |
-| `baozhangka-tool-linux-x86_64.tar.gz` | Linux(桌面发行版) | x86_64 / AMD64 | 依赖系统 GTK3 + X11 |
+| `baozhangka-tool-linux-x86_64.tar.gz` | Linux(桌面发行版) | x86_64 / AMD64 | **零依赖**(仅 X11 桌面自带的 libX11 + libXtst) |
 | `baozhangka-tool-linux-arm64.tar.gz` | Linux | **ARM64 / aarch64**(树莓派 4/5、ARM 小主机、国产 ARM 平台) | 原生编译 |
 | `baozhangka-tool-linux-armhf.tar.gz` | Linux | ARM32 / armhf(树莓派 3 等 32 位系统) | 原生编译 |
 | `baozhangka-checker-web.zip` | 任意(浏览器) | — | **网页版综合检查工具**(数据校验/联审/字段生成等),放到主程序目录(或解压)后,侧栏「综合检查」按钮一键打开——检测到 zip 会**自动解压**;也可独立双击 `主程序.html` 使用 |
@@ -81,16 +81,7 @@ chmod +x baozhangka-tool
 ./baozhangka-tool
 ```
 
-3. 若提示缺少 GTK3(部分精简系统),安装依赖即可:
-
-```sh
-# Debian / Ubuntu / 树莓派
-sudo apt install libgtk-3-0 libxtst6
-# Fedora
-sudo dnf install gtk3 libXtst
-# Arch
-sudo pacman -S gtk3 libxtst
-```
+> Linux 版**零依赖**:界面为纯 X11 实现(libX11 + libXtst,任何 X11 桌面自带),解压即用,无需安装任何软件包。
 
 > **Wayland 用户**:输入模拟依赖 X11(XTest)。请在登录界面选"Ubuntu on X11"之类会话运行。
 
@@ -118,10 +109,10 @@ sudo pacman -S gtk3 libxtst
 build\windows_build.bat
 ```
 
-**Linux**(自动识别架构,依赖 GCC + GTK3 开发库):
+**Linux**(自动识别架构,依赖 GCC + X11 开发库):
 
 ```sh
-sudo apt install gcc pkg-config libgtk-3-dev libxtst-dev   # Debian/Ubuntu/树莓派
+sudo apt install gcc pkg-config libx11-dev libxtst-dev   # Debian/Ubuntu/树莓派
 sh build/linux_build.sh
 ./dist/baozhangka-tool
 ```
@@ -208,9 +199,10 @@ sh build/linux_build.sh
 │   │   ├── picker.c        全屏取点
 │   │   ├── platform_win.c  SendInput/剪贴板/热键
 │   │   └── app.rc/.manifest 资源与 comctl32 v6 清单
-│   └── gtk/                Linux 后端(GTK3 + X11/XTest)
-│       ├── main.c          主界面
-│       └── platform_x11.c  XTest 输入合成/剪贴板/热键
+│   └── linux/              Linux 后端(纯 X11/XTest,零依赖)
+│       ├── main.c          主界面(xui)
+│       ├── xui.c/.h        纯 Xlib 轻量控件层(按钮/输入框/列表/对话框/文件选择)
+│       └── platform_x11.c  XTest 输入合成/取色/找窗口/selection 剪贴板
 ├── build/
 │   ├── windows_build.bat   Windows 构建
 │   ├── linux_build.sh      Linux 构建(x86/ARM 通用)

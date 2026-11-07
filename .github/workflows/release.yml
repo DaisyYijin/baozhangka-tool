@@ -42,7 +42,9 @@ jobs:
               echo "PASS $name"
             else
               echo "FAIL $name"
-              tail -20 "/tmp/$name.err" "/tmp/$name.out" 2>/dev/null || true
+              ls -la "/tmp/$name"* 2>/dev/null || true
+              cat -v "/tmp/$name.err" "/tmp/$name.out" 2>/dev/null || true
+              echo "---- end $name ----"
               fail=1
             fi
           done

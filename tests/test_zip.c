@@ -2,21 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include "../core/zip.h"
-
-static unsigned char *readall(const wchar_t *path, size_t *len)
-{
-    FILE *f = _wfopen(path, L"rb");
-    if (!f) return NULL;
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    unsigned char *buf = (unsigned char *)malloc((size_t)sz);
-    if (fread(buf, 1, (size_t)sz, f) != (size_t)sz) { free(buf); fclose(f); return NULL; }
-    fclose(f);
-    *len = (size_t)sz;
-    return buf;
-}
+#include "../core/import.h"     /* read_file_all:跨平台读文件 */
 
 static int list_cb(const char *name, void *ud)
 {
@@ -30,7 +18,7 @@ int main(void)
 {
     size_t len = 0;
     printf("step1: read file...\n"); fflush(stdout);
-    unsigned char *data = readall(L"examples/test.xlsx", &len);
+    unsigned char *data = read_file_all(L"examples/test.xlsx", &len);
     if (!data) { printf("read FAIL\n"); return 1; }
     printf("step1 ok: %zu bytes, sig=%02x%02x\n", len, data[0], data[1]); fflush(stdout);
 
