@@ -214,7 +214,7 @@ static const wchar_t *const TYPE_HELP[ACT_TYPE_COUNT_] = {
     L"先点「≡ 框选模板」在屏幕上拖动框选要查找的图块,执行时自动搜索:\n"
     L"动作:0=只定位到该处,1=单击它,2=双击它;「找到则跳转」可跳步骤;\n"
     L"「未找到跳转」常用于先去点开下拉菜单再回来找;\n"
-    L"容差越大越宽松,找不到时可调大试试(默认 20);\n"
+    L"容差(0-255)越大越宽松,找不到时可调大试试(默认 20);\n"
     L"搜索区宽/高填 0 = 全屏搜索(默认)。",
     /* ACT_XLSIF Excel判断 */
     L"读取 Excel 当前行指定列的文字,按条件跳到不同步骤:\n"
@@ -392,7 +392,7 @@ static void layout_rows(int type)
     }
     /* 行:找图 找到动作 + 容差(复用 次数=动作 间隔=容差) */
     if (type == ACT_FINDIMG) {
-        set_ctl_text(IDC_LB_COUNT, L"动作/容差(0-255)");
+        set_ctl_text(IDC_LB_COUNT, L"动作/容差");
         show_ctl(IDC_LB_COUNT, 1);
         show_ctl(IDC_COUNT, 1);
         show_ctl(IDC_INTERVAL, 1);
@@ -1167,15 +1167,17 @@ static void tp_paint(HDC dc)
 
         draw_type_icon(dc, rc.left + 8, rc.top + 15, TP_ITEMS[i].type);
 
-        RECT rcName = { rc.left + 50, rc.top + 12, rc.right - 8, rc.top + 34 };
+        RECT rcName = { rc.left + 46, rc.top + 12, rc.right - 4, rc.top + 34 };
         SetTextColor(dc, hot ? QQ_BLUE : RGB(0x2E,0x2E,0x2E));
         HGDIOBJ ofb = SelectObject(dc, g_uiFontBold);
-        DrawTextW(dc, TP_ITEMS[i].name, -1, &rcName, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        DrawTextW(dc, TP_ITEMS[i].name, -1, &rcName, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         SelectObject(dc, ofb);
-        RECT rcDesc = { rc.left + 50, rc.top + 36, rc.right - 8, rc.top + 56 };
+        /* 描述区两行自动换行(卡片内宽仅约 110px,单行会截断) */
+        RECT rcDesc = { rc.left + 46, rc.top + 35, rc.right - 4, rc.top + 62 };
         SetTextColor(dc, RGB(0x9A,0x9A,0x9A));
         SelectObject(dc, g_uiFont);
-        DrawTextW(dc, TP_ITEMS[i].desc, -1, &rcDesc, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        DrawTextW(dc, TP_ITEMS[i].desc, -1, &rcDesc,
+                  DT_LEFT | DT_TOP | DT_WORDBREAK | DT_EDITCONTROL);
     }
 }
 

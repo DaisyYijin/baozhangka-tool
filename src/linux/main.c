@@ -444,6 +444,8 @@ static void edit_apply_type(EditBox *eb)
     if (xlsif)
         xui_set_text(eb->lb_cnt,
                      "\xe5\x88\x97\xe5\x8f\xb7(0={\xe8\xa1\x8c}\xe5\x88\x97):");       /* 列号(0={行}列): */
+    else if (findimg)
+        xui_set_text(eb->lb_cnt, "\xe5\x8a\xa8\xe4\xbd\x9c/\xe5\xae\xb9\xe5\xb7\xae:");  /* 动作/容差: */
     else
         xui_set_text(eb->lb_cnt,
                      "\xe6\xac\xa1\xe6\x95\xb0 / \xe9\x97\xb4\xe9\x9a\x94(ms):");     /* 次数 / 间隔(ms): */
@@ -455,6 +457,10 @@ static void edit_apply_type(EditBox *eb)
     xui_set_text(eb->lb_text, xlsif ?
                  "\xe6\x9d\xa1\xe4\xbb\xb6(\xe5\x80\xbc=>\xe6\xad\xa5\xe9\xaa\xa4):" :      /* 条件(值=>步骤): */
                  "\xe8\xbe\x93\xe5\x85\xa5\xe5\x86\x85\xe5\xae\xb9:");                     /* 输入内容: */
+    /* 坐标行标签:找图=搜索区起点 */
+    if (findimg)
+        xui_set_text(eb->lb_xy,
+                     "\xe6\x90\x9c\xe7\xb4\xa2\xe5\x8c\xba\xe8\xb5\xb7\xe7\x82\xb9 X / Y:");  /* 搜索区起点 X / Y: */
     xui_show(eb->clear, type == ACT_TEXT);
     xui_show(eb->lb_scroll, scroll);
     xui_show(eb->scroll, scroll);
