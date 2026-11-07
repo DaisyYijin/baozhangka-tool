@@ -29,9 +29,12 @@ enum {
     IDC_LB_XY, IDC_LB_COUNT, IDC_LB_TEXT, IDC_LB_SCROLL, IDC_LB_XY2, IDC_LB_DELAY,
     IDC_LB_NOTE, IDC_LB_JUMP, IDC_JUMP, IDC_JUMPTAB,
     IDC_LB_W,
-    IDC_IMPSHEET, IDC_IMPCOL,
-    /* 找图新增:ID 从 140 起,避开 ctl 槽位 30/31(IDOK/IDCANCEL 保留) */
+    /* 找图新增 ID 与数据源下拉 ID 统一从 140/146 起:
+       避开 ctl 槽位 30/31(IDOK/IDCANCEL 保留)——
+       原先 IDC_IMPCOL=130 恰好映射到槽 30,布局隐藏 IMPCOL 时
+       会误把确定按钮一并隐藏(v1.5.0 起的潜伏 bug) */
     IDC_LB_TPL = 140, IDC_PICKTPL, IDC_TPLINFO, IDC_LB_MISSJUMP, IDC_MISSJUMP,
+    IDC_IMPSHEET = 146, IDC_IMPCOL,
 };
 
 /* 行几何:标签右对齐列 + 控件列 */
