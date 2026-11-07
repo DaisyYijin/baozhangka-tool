@@ -33,6 +33,7 @@ static const struct { const wchar_t *cn; const wchar_t *en; } ACT_NAMES[] = {
     { L"调用",   L"call" },
     { L"读文本", L"ocr" },
     { L"找图",   L"findimg" },
+    { L"Excel判断", L"xlsif" },
 };
 
 const wchar_t *act_type_name(int type)
@@ -76,6 +77,7 @@ int act_type_from_name(const wchar_t *name)
         { L"拖动", ACT_DRAG },    { L"拖拽", ACT_DRAG },
         { L"跳转", ACT_JUMP },    { L"转到", ACT_JUMP },
         { L"找图", ACT_FINDIMG }, { L"图片查找", ACT_FINDIMG },
+        { L"Excel判断", ACT_XLSIF }, { L"单元格判断", ACT_XLSIF },
     };
     for (int i = 0; i < (int)(sizeof(CN_ALIAS) / sizeof(CN_ALIAS[0])); i++)
         if (wci_eq(name, CN_ALIAS[i].alias)) return CN_ALIAS[i].type;
@@ -247,6 +249,16 @@ static void do_drag(const Platform *p, const Step *s)
 }
 
 /* 从整行文本(列以 	 分隔)取第 col 列(0 起);列数不足返回空串 */
+/* 去首尾空格(半角/全角),返回起始指针(原地截断尾部) */
+static wchar_t *trim_ws(wchar_t *s)
+{
+    while (*s == L' ' || *s == 0x3000) s++;
+    wchar_t *e = s + wcslen(s);
+    while (e > s && (e[-1] == L' ' || e[-1] == 0x3000)) e--;
+    *e = 0;
+    return s;
+}
+
 static void row_col(const wchar_t *row, int col, wchar_t *out, int cap)
 {
     out[0] = 0;
@@ -502,6 +514,39 @@ continue_loop:
                 } else if (s->missJump >= 1 && s->missJump <= cur->count) {
                     if (++jumps > 10000) return ENGINE_DONE;
                     i = s->missJump - 2;
+                }
+                break;
+            }
+            case ACT_XLSIF: {
+                /* Excel单元格判断:读当前行(cur 数据源,无则回退 base)指定列的值,
+                   按 "值=>步骤"(半/全角逗号分隔多组)在当前任务内跳转;不匹配→继续。
+                   仅影响本轮步骤路径;轮次(=Excel 行迭代)不受影响 */
+                const Task *dt = cur->dataRowCount > 0 ? cur : base;
+                if (dt->dataRowCount > 0 && s->text[0]) {
+                    const wchar_t *row = dt->dataRows[(loop - 1) % dt->dataRowCount];
+                    int col = s->count > 0 ? s->count - 1 : dt->dataSelCol;
+                    wchar_t cellv[AC_TEXT_MAX];
+                    row_col(row, col, cellv, AC_TEXT_MAX);
+                    wchar_t cond[AC_TEXT_MAX];
+                    wcsncpy(cond, s->text, AC_TEXT_MAX - 1);
+                    cond[AC_TEXT_MAX - 1] = 0;
+                    wchar_t *ctx = NULL;
+                    for (wchar_t *seg = wcstok(cond, L",\xFF0C", &ctx); seg;
+                         seg = wcstok(NULL, L",\xFF0C", &ctx)) {
+                        wchar_t *arrow = wcsstr(seg, L"=>");
+                        if (!arrow) continue;
+                        *arrow = 0;
+                        wchar_t *val = trim_ws(seg);
+                        wchar_t *tgt = trim_ws(arrow + 2);
+                        if (val[0] && wcscmp(val, cellv) == 0) {
+                            long t2 = wcstol(tgt, NULL, 10);
+                            if (t2 >= 1 && t2 <= cur->count) {
+                                if (++jumps > 10000) return ENGINE_DONE;
+                                i = (int)t2 - 2;      /* 跳到目标步骤(轮内) */
+                            }
+                            break;
+                        }
+                    }
                 }
                 break;
             }

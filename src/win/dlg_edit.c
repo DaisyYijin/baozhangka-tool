@@ -193,7 +193,7 @@ static void layout_rows(int type)
     int scroll  = (type == ACT_SCROLL);
     int drag    = (type == ACT_DRAG);
     int text    = (type == ACT_TEXT || type == ACT_KEY || type == ACT_WAITWIN ||
-                   type == ACT_OCR);
+                   type == ACT_OCR || type == ACT_XLSIF);
     int y = TOP_Y;
 
     /* 行:坐标 / 滚动位置 / 起点 */
@@ -222,12 +222,13 @@ static void layout_rows(int type)
         show_ctl(IDC_PICKXY, 0);
     }
 
-    /* 行:次数 / 间隔(多击) */
-    if (type == ACT_MULTI) {
-        set_ctl_text(IDC_LB_COUNT, L"次数 / 间隔ms");
+    /* 行:次数 / 间隔(多击);Excel判断=列号(0={行}选定列,单框) */
+    if (type == ACT_MULTI || type == ACT_XLSIF) {
+        set_ctl_text(IDC_LB_COUNT, type == ACT_MULTI ? L"次数 / 间隔ms" :
+                                                 L"列号(0={行}列)");
         show_ctl(IDC_LB_COUNT, 1);
         show_ctl(IDC_COUNT, 1);
-        show_ctl(IDC_INTERVAL, 1);
+        show_ctl(IDC_INTERVAL, type == ACT_MULTI);
         place(IDC_LB_COUNT, LB_X, y + 2, LB_W, 20);
         place(IDC_COUNT, CT_X, y, 56, 22);
         place(IDC_INTERVAL, CT_X + 62, y, 56, 22);
@@ -243,7 +244,8 @@ static void layout_rows(int type)
         set_ctl_text(IDC_LB_TEXT,
                      type == ACT_TEXT ? L"输入内容" :
                      type == ACT_WAITWIN ? L"窗口标题包含" :
-                     type == ACT_OCR ? L"关键词" : L"按键组合");
+                     type == ACT_OCR ? L"关键词" :
+                     type == ACT_XLSIF ? L"条件(值=>步骤,…)" : L"按键组合");
         show_ctl(IDC_LB_TEXT, 1);
         show_ctl(IDC_TEXT, 1);
         place(IDC_LB_TEXT, LB_X, y + 2, LB_W, 20);
@@ -527,8 +529,9 @@ static int collect(void)
 
     s->x = get_int(IDC_X, 0);
     s->y = get_int(IDC_Y, 0);
-    s->count = (s->type == ACT_MULTI || s->type == ACT_FINDIMG) ?
-               get_int(IDC_COUNT, 1) : 0;
+    s->count = (s->type == ACT_MULTI || s->type == ACT_FINDIMG ||
+                s->type == ACT_XLSIF) ?
+               get_int(IDC_COUNT, s->type == ACT_XLSIF ? 0 : 1) : 0;
     /* 单击/双击/右击/中击固定次数,忽略(隐藏的)次数框,避免默认值混入 */
     s->interval = get_int(IDC_INTERVAL, 100);
     s->x2 = get_int(IDC_X2, 0);
@@ -582,6 +585,11 @@ static int collect(void)
 
     if (s->type == ACT_TEXT && !s->text[0]) {
         MessageBoxW(g_edit.hwnd, L"请填写输入内容。", L"提示", MB_ICONINFORMATION);
+        return 0;
+    }
+    if (s->type == ACT_XLSIF && !s->text[0]) {
+        MessageBoxW(g_edit.hwnd, L"请填写条件,如:男=>3,女=>18",
+                    L"提示", MB_ICONINFORMATION);
         return 0;
     }
     if (s->type == ACT_KEY) {
@@ -829,8 +837,9 @@ static const struct {
     { ACT_CALL,     L"调用",   L"执行另一TAB后返回" },
     { ACT_OCR,      L"读文本", L"区域识别文字并判断" },
     { ACT_FINDIMG,  L"找图",   L"框选图像模板,找到后定位/点击" },
+    { ACT_XLSIF,    L"Excel判断", L"读当前行指定列,按 值=>步骤 跳转" },
 };
-#define TP_COUNT 16
+#define TP_COUNT 17
 
 /* GDI 绘制类型小图标(36x36,QQ 蓝) */
 static void draw_type_icon(HDC dc, int x, int y, int type)
@@ -949,6 +958,19 @@ static void draw_type_icon(HDC dc, int x, int y, int type)
         DeleteObject(dp);
         MoveToEx(dc, x + 12, y + 16, NULL); LineTo(dc, x + 20, y + 16);
         MoveToEx(dc, x + 16, y + 12, NULL); LineTo(dc, x + 16, y + 20);
+        break;
+    }
+    case ACT_XLSIF: {
+        /* Excel判断:单元格表格 + 分叉箭头 */
+        for (int i = 0; i < 3; i++) {
+            MoveToEx(dc, x + 4, y + 8 + i * 8, NULL);
+            LineTo(dc, x + 28, y + 8 + i * 8);
+        }
+        MoveToEx(dc, x + 10, y + 8, NULL);  LineTo(dc, x + 10, y + 24);
+        MoveToEx(dc, x + 21, y + 8, NULL);  LineTo(dc, x + 21, y + 24);
+        MoveToEx(dc, x + 14, y + 12, NULL); LineTo(dc, x + 24, y + 12);
+        MoveToEx(dc, x + 24, y + 12, NULL); LineTo(dc, x + 19, y + 9);
+        MoveToEx(dc, x + 24, y + 12, NULL); LineTo(dc, x + 19, y + 15);
         break;
     }
     case ACT_WAITWIN: {
@@ -1285,7 +1307,8 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
     /* 初始值 */
     set_int(IDC_X, s->x);
     set_int(IDC_Y, s->y);
-    set_int(IDC_COUNT, s->count > 0 ? s->count : 3);
+    set_int(IDC_COUNT, s->type == ACT_XLSIF ? s->count :
+              (s->count > 0 ? s->count : 3));
     set_int(IDC_INTERVAL, s->interval > 0 ? s->interval : 100);
     set_int(IDC_X2, s->x2);
     set_int(IDC_Y2, s->y2);

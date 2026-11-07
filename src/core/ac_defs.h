@@ -35,6 +35,7 @@ enum {
     ACT_CALL,        /* 子流程调用:执行目标TAB后返回调用处下一步 */
     ACT_OCR,         /* 读文本:区域识别(ocr_region 钩子);含关键词则跳转 */
     ACT_FINDIMG,     /* 找图:模板图像匹配;找到→定位/点击(可跳转),未找到→可跳转 */
+    ACT_XLSIF,      /* Excel单元格判断:读当前行指定列,按"值=>步骤"条件串轮内跳转 */
     ACT_TYPE_COUNT_
 };
 

@@ -413,6 +413,7 @@ static const struct { int type; const char *cn; } EDIT_TYPES[] = {
     { ACT_SCROLL,  "\xe6\xbb\x9a\xe8\xbd\xae" },                                 /* 滚轮 */
     { ACT_DRAG,    "\xe9\xbc\xa0\xe6\xa0\x87\xe6\x8b\x96\xe5\x8a\xa8" },         /* 鼠标拖动 */
     { ACT_FINDIMG, "\xe6\x89\xbe\xe5\x9b\xbe" },                                 /* 找图 */
+    { ACT_XLSIF,   "Excel\xe5\x88\xa4\xe6\x96\xad" },                            /* Excel判断 */
 };
 #define EDIT_TYPE_N ((int)(sizeof(EDIT_TYPES) / sizeof(EDIT_TYPES[0])))
 
@@ -422,16 +423,23 @@ static void edit_apply_type(EditBox *eb)
     int isClick = (type == ACT_CLICK || type == ACT_DBLCLICK || type == ACT_MULTI ||
                    type == ACT_RCLICK || type == ACT_MCLICK);
     int multi = type == ACT_MULTI, scroll = type == ACT_SCROLL, drag = type == ACT_DRAG;
-    int text = (type == ACT_TEXT || type == ACT_KEY);
+    int text = (type == ACT_TEXT || type == ACT_KEY || type == ACT_XLSIF);
     int findimg = (type == ACT_FINDIMG);
+    int xlsif = (type == ACT_XLSIF);
     xui_show(eb->lb_xy, isClick || scroll || drag || findimg);
     xui_show(eb->x, isClick || scroll || drag || findimg);
     xui_show(eb->y, isClick || scroll || drag || findimg);
-    xui_show(eb->lb_cnt, multi || findimg);
-    xui_show(eb->count, multi || findimg);
-    xui_show(eb->interval, multi || findimg);
+    xui_show(eb->lb_cnt, multi || xlsif);
+    xui_show(eb->count, multi || xlsif);
+    xui_show(eb->interval, multi);
     xui_show(eb->lb_text, text);
     xui_show(eb->text, text);
+    if (xlsif)
+        xui_set_text(eb->lb_cnt,
+                     "\xe5\x88\x97\xe5\x8f\xb7(0={\xe8\xa1\x8c}\xe5\x88\x97):");       /* 列号(0={行}列): */
+    else
+        xui_set_text(eb->lb_cnt,
+                     "\xe6\xac\xa1\xe6\x95\xb0 / \xe9\x97\xb4\xe9\x9a\x94(ms):");     /* 次数 / 间隔(ms): */
     xui_show(eb->clear, type == ACT_TEXT);
     xui_show(eb->lb_scroll, scroll);
     xui_show(eb->scroll, scroll);
@@ -537,6 +545,11 @@ static void edit_on_ok(XuiWgt *w, void *ud)
     } else {
         s->missJump = 0;
     }
+    if (s->type == ACT_XLSIF && !s->text[0]) {
+        show_info("\xe8\xaf\xb7\xe5\xa1\xab\xe5\x86\x99\xe6\x9d\xa1\xe4\xbb\xb6"
+                  "\xe5\xa6\x82:\xe7\x94\xb7=>3,\xe5\xa5\xb3=>18");   /* 请填写条件如:男=>3,女=>18 */
+        return;                       /* 不关闭对话框 */
+    }
     xui_window_exit(eb->dlg, 1);
 }
 static void edit_on_cancel(XuiWgt *w, void *ud)
@@ -563,7 +576,8 @@ static int edit_step_dialog(Step *s, int isNew)
     if (s->text[0]) wcs_to_u8(s->text, textU8, sizeof(textU8) - 1);
     snprintf(xs, sizeof(xs), "%d", s->x);
     snprintf(ys, sizeof(ys), "%d", s->y);
-    snprintf(cs, sizeof(cs), "%d", s->count > 0 ? s->count : 1);
+    snprintf(cs, sizeof(cs), "%d", s->type == ACT_XLSIF ? s->count :
+              (s->count > 0 ? s->count : 1));
     snprintf(is, sizeof(is), "%d", s->interval > 0 ? s->interval : 20);
     snprintf(ss, sizeof(ss), "%d", s->scroll != 0 ? s->scroll : 3);
     snprintf(x2s, sizeof(x2s), "%d", s->x2);
