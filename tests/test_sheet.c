@@ -36,10 +36,10 @@ static void print_task(const Task *t)
            t->count, t->loops, t->loopGap, t->jitter, t->startCountdown);
     for (int i = 0; i < t->count; i++) {
         Step *s = &t->steps[i];
-        wchar_t text[128] = L"";
-        wcsncpy(text, s->text, 127);
-        printf("  #%d type=%ls x=%d y=%d w=%d h=%d n=%d gap=%d text=%ls clr=%d db=%d da=%d\n",
-               i + 1, act_type_name(s->type), s->x, s->y, s->w, s->h,
+        char text[256];
+        wcs_to_u8(s->text, text, sizeof(text) - 1);
+        printf("  #%d type=%d x=%d y=%d w=%d h=%d n=%d gap=%d text=%s clr=%d db=%d da=%d\n",
+               i + 1, s->type, s->x, s->y, s->w, s->h,
                s->count, s->interval, text, s->clearFirst,
                s->delayBefore, s->delayAfter);
     }
@@ -66,14 +66,18 @@ int main(void)
                 int n = task_import_sheet(&t, &s, 0);
                 printf("导入 %d 步\n", n);
                 print_task(&t);
-                /* 行1:单击(x=200, y=0) 行2:单击(100,200,50,80)
+                /* 行1:单击(x=200, y=0) 行2:单击(100,200,次数50,间隔80)
+                   无表头默认列序: 动作,x,y,次数,间隔,文本,前延时,后延时...(import.c)
                    行3/4:输入 文本在默认列序的次数/间隔位,仅验证类型
                    行5:动作名不识别,应跳过 */
                 if (n != 4) { printf("FAIL: 预期 4 步\n"); fail++; }
                 if (n >= 2) {
                     Step *a = &t.steps[1];
-                    if (a->type != ACT_CLICK || a->x != 100 || a->y != 200 || a->w != 50 || a->h != 80) {
-                        printf("FAIL: 单击步骤字段错误\n"); fail++;
+                    if (a->type != ACT_CLICK || a->x != 100 || a->y != 200 ||
+                        a->count != 50 || a->interval != 80) {
+                        printf("FAIL: 单击步骤字段错误 type=%d x=%d y=%d n=%d gap=%d"
+                               " (期望 type=%d x=100 y=200 n=50 gap=80)\n",
+                               a->type, a->x, a->y, a->count, a->interval, ACT_CLICK); fail++;
                     }
                 }
                 if (n >= 4) {
