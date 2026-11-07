@@ -1086,20 +1086,9 @@ static void sync_tab_labels(void);   /* TAB文本 <- 任务簿名 */
 static int g_excelRows;                 /* 前向声明(定义在后) */
 static void apply_excel_rows_check(HWND hwndDlg);
 
-static void load_task_file(void)
+/* 拖拽/点击共用的导入:按路径加载任务文件(.xlsx/.csv/.txt) */
+static void load_task_from_path(const wchar_t *path)
 {
-    wchar_t path[MAX_PATH] = L"";
-    OPENFILENAMEW ofn;
-    memset(&ofn, 0, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = g_hMain;
-    ofn.lpstrFilter = L"任务 / Excel 文件 (*.xlsx;*.csv;*.txt)\0*.xlsx;*.csv;*.txt\0所有文件 (*.*)\0*.*\0";
-    ofn.lpstrFile = path;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
-    ofn.lpstrTitle = L"选择任务 / Excel 文件";
-    if (!GetOpenFileNameW(&ofn)) return;
-
     size_t len = 0;
     unsigned char *data = read_file_all(path, &len);
     if (!data) { msg_err(L"无法读取文件。"); return; }
@@ -1192,6 +1181,23 @@ static void load_task_file(void)
     set_status(L"%s", buf);
     sync_tab_labels();     /* 文件含 #TAB名 时恢复显示名 */
     refresh_list();
+}
+
+/* 点击「导入」:弹文件选择框(与拖拽导入共用加载逻辑) */
+static void load_task_file(void)
+{
+    wchar_t path[MAX_PATH] = L"";
+    OPENFILENAMEW ofn;
+    memset(&ofn, 0, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g_hMain;
+    ofn.lpstrFilter = L"任务 / Excel 文件 (*.xlsx;*.csv;*.txt)\0*.xlsx;*.csv;*.txt\0所有文件 (*.*)\0*.*\0";
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+    ofn.lpstrTitle = L"选择任务 / Excel 文件";
+    if (!GetOpenFileNameW(&ofn)) return;
+    load_task_from_path(path);
 }
 
 /* ---- 数据源绑定状态与接口(编辑对话框的工作表/表头选择驱动) ---- */
@@ -2316,6 +2322,22 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         InvalidateRect(hwnd, NULL, TRUE);   /* 重绘卡片 */
         return 0;
 
+    case WM_DROPFILES: {
+        /* 拖拽文件导入(与点击「导入」共用加载逻辑) */
+        wchar_t dpath[MAX_PATH] = L"";
+        if (DragQueryFileW((HDROP)wp, 0, dpath, MAX_PATH) > 0) {
+            const wchar_t *dot = wcsrchr(dpath, L'.');
+            if (dot && (_wcsicmp(dot, L".xlsx") == 0 || _wcsicmp(dot, L".csv") == 0 ||
+                        _wcsicmp(dot, L".txt") == 0)) {
+                if (!g_running) load_task_from_path(dpath);
+                else msg_info(L"任务运行中,请先停止(Ctrl+F12)再导入文件。");
+            } else {
+                msg_info(L"仅支持拖入 .xlsx / .csv / .txt 文件。");
+            }
+        }
+        DragFinish((HDROP)wp);
+        return 0;
+    }
     case WM_HOTKEY:
         if (g_uiDlgActive) return 0;   /* 模态对话框打开期间忽略热键 */
         if (wp == HOTK_START) start_run();
@@ -2620,6 +2642,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmdLine, int show)
     if (!g_hMain) return 1;
 
     ShowWindow(g_hMain, show);
+    DragAcceptFiles(g_hMain, TRUE);      /* 支持拖拽 Excel/CSV 到窗口导入 */
     UpdateWindow(g_hMain);
 
     RECT rc;
