@@ -9,6 +9,61 @@ permissions:
   contents: write
 
 jobs:
+  # ---------- Linux 零依赖验证(编译 + core 测试 + Xvfb 冒烟) ----------
+  verify-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc pkg-config libx11-dev libxtst-dev xvfb x11-utils xfonts-base file
+      - name: Build
+        run: sh build/linux_build.sh
+      - name: Verify no GTK/GLib dependencies
+        run: |
+          ldd dist/baozhangka-tool
+          if ldd dist/baozhangka-tool | grep -iE 'gtk|glib|gdk|pango|cairo'; then
+            echo "::error::发现 GTK/GLib 残留依赖"
+            exit 1
+          fi
+          echo "依赖检查通过:仅 X11 家族"
+      - name: Core unit tests
+        run: |
+          fail=0
+          for t in tests/test_*.c; do
+            name=$(basename "$t" .c)
+            if [ "$name" = "test_theme" ]; then echo "skip $name (Windows 专属)"; continue; fi
+            if gcc -std=c99 -O1 -Isrc/core "$t" \
+                src/core/u8.c src/core/inflate.c src/core/zip.c src/core/sheet.c \
+                src/core/engine.c src/core/ac_keys.c src/core/import.c \
+                -o "/tmp/$name" 2> "/tmp/$name.err" \
+               && "/tmp/$name" > "/tmp/$name.out" 2>&1; then
+              echo "PASS $name"
+            else
+              echo "FAIL $name"
+              tail -20 "/tmp/$name.err" "/tmp/$name.out" 2>/dev/null || true
+              fail=1
+            fi
+          done
+          exit $fail
+      - name: Xvfb smoke test (GUI 启动存活)
+        run: |
+          Xvfb :99 -screen 0 1280x800x24 >/tmp/xvfb.log 2>&1 &
+          sleep 2
+          DISPLAY=:99 ./dist/baozhangka-tool >/tmp/app.log 2>&1 &
+          APP=$!
+          sleep 4
+          if kill -0 $APP 2>/dev/null; then
+            echo "程序存活 4s OK"
+            xwininfo -root -children 2>/dev/null | head -15 || true
+            kill $APP 2>/dev/null || true
+          else
+            echo "::error::程序提前退出"
+            cat /tmp/app.log || true
+            exit 1
+          fi
+
   # ---------- Windows x86(单文件,XP SP3 ~ Win11 通用) ----------
   windows-x86:
     runs-on: windows-latest
@@ -50,7 +105,7 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc pkg-config file libgtk-3-dev libxtst-dev
+          sudo apt-get install -y gcc pkg-config file libxtst-dev
       - name: Build
         run: |
           sh build/linux_build.sh
@@ -70,7 +125,7 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc pkg-config file libgtk-3-dev libxtst-dev
+          sudo apt-get install -y gcc pkg-config file libxtst-dev
       - name: Build
         run: |
           sh build/linux_build.sh
@@ -99,7 +154,7 @@ jobs:
             set -e
             cp -r /repo /src && cd /src
             apt-get update
-            apt-get install -y gcc pkg-config file libgtk-3-dev libxtst-dev
+            apt-get install -y gcc pkg-config file libxtst-dev
             sh build/linux_build.sh
             file dist/baozhangka-tool
             cp baozhangka-tool* /repo/ 2>/dev/null || cp dist/baozhangka-tool /repo/
