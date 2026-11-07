@@ -34,6 +34,7 @@ enum {
        原先 IDC_IMPCOL=130 恰好映射到槽 30,布局隐藏 IMPCOL 时
        会误把确定按钮一并隐藏(v1.5.0 起的潜伏 bug) */
     IDC_LB_TPL = 140, IDC_PICKTPL, IDC_TPLINFO, IDC_LB_MISSJUMP, IDC_MISSJUMP,
+    IDC_TYPEHELP = 148,               /* 底部:按类型的通俗填写说明(灰字多行) */
     IDC_IMPSHEET = 146, IDC_IMPCOL,
 };
 
@@ -49,7 +50,7 @@ enum {
 
 typedef struct {
     HWND  hwnd;
-    HWND  ctl[48];
+    HWND  ctl[56];
     int   done;
     int   ok;
     Step *step;
@@ -164,6 +165,72 @@ static void place(int id, int x, int y, int w, int h)
 }
 
 /* ---------- 按类型重排布局并收缩窗口 ---------- */
+
+/* 各类型填写说明(通俗,面向普通用户;显示在对话框底部,按 \n 计行数) */
+static const wchar_t *const TYPE_HELP[ACT_TYPE_COUNT_] = {
+    /* ACT_CLICK 单击 */
+    L"在指定坐标点击一次。坐标点「屏幕取点」到屏幕上点一下即可;\n"
+    L"填了宽/高会在该范围内随机落点(更像真人操作)。",
+    /* ACT_DBLCLICK 双击 */
+    L"在指定坐标双击打开。坐标点「屏幕取点」获取;",
+    /* ACT_MULTI 多击 */
+    L"同一位置连续点击:次数=一共点几下,间隔=每两下之间等待的毫秒。\n"
+    L"例:次数 5、间隔 300 = 每 0.3 秒点一下,共点 5 下。",
+    /* ACT_RCLICK 右击 */
+    L"在指定坐标点击鼠标右键(弹出右键菜单)。",
+    /* ACT_MCLICK 中击 */
+    L"在指定坐标点击鼠标中键(滚轮键)。",
+    /* ACT_TEXT 输入 */
+    L"把文字粘贴到当前输入框(支持中文)。\n"
+    L"勾选「输入前清空」会先全选删除原内容再输入;\n"
+    L"文字里可写 {行} 自动填入当轮 Excel 对应列的内容。",
+    /* ACT_KEY 按键 */
+    L"发送按键或组合键,多个键用 + 连接。\n"
+    L"例:ctrl+s 保存、alt+tab 切窗口、win+r 运行、F5 刷新、enter 回车。",
+    /* ACT_WAIT 等待 */
+    L"暂停等待一段时间:1000 毫秒 = 1 秒。",
+    /* ACT_SCROLL 滚轮 */
+    L"滚动鼠标滚轮:正数向上翻页,负数向下翻页。",
+    /* ACT_DRAG 拖动 */
+    L"按住鼠标从起点拖到终点再松开(拖滑块/框选文字等)。",
+    /* ACT_JUMP 跳转 */
+    L"直接跳到指定步骤继续执行(可跳过或重复某些步骤)。\n"
+    L"目标格式:步骤号,如 5;或 TAB:步号,如 2:5 = 跳到任务2的第5步。",
+    /* ACT_WAITWIN 等窗口 */
+    L"等到出现指定窗口再继续:填写窗口标题包含的文字。\n"
+    L"超过「等待时长」就不再等,直接往下执行。",
+    /* ACT_CHECK 判断 */
+    L"屏幕上某点的颜色符合设定时,跳转到指定步骤(做条件分支)。\n"
+    L"点「屏幕取点」会自动抓取该处颜色;容差越大判定越宽松;\n"
+    L"取点时拖动框选 = 在整个区域内找到该颜色即算满足。",
+    /* ACT_CALL 调用 */
+    L"子流程:先执行另一个 TAB 的全部步骤,做完自动回到本步的下一步。\n"
+    L"公共流程(如登录)只需写一份,最多嵌套 8 层。",
+    /* ACT_OCR 读文本 */
+    L"识别屏幕区域内的文字(数字/字母/常用符号,中文暂不支持)。\n"
+    L"取点时拖动框选识别区域;「关键词」命中时跳转——\n"
+    L"例如等页面出现「成功」二字再继续往下做。",
+    /* ACT_FINDIMG 找图 */
+    L"先点「≡ 框选模板」在屏幕上拖动框选要查找的图块,执行时自动搜索:\n"
+    L"动作:0=只定位到该处,1=单击它,2=双击它;「找到则跳转」可跳步骤;\n"
+    L"「未找到跳转」常用于先去点开下拉菜单再回来找;\n"
+    L"容差越大越宽松,找不到时可调大试试(默认 20)。",
+    /* ACT_XLSIF Excel判断 */
+    L"读取 Excel 当前行指定列的文字,按条件跳到不同步骤:\n"
+    L"条件写法:文字=>步骤号,多个条件用逗号分开。\n"
+    L"例:男=>2,女=>5 = 该列是「男」跳第2步、「女」跳第5步,都不是则继续。\n"
+    L"列号:第几列(从 1 数);填 0 = 用数据源绑定的 {行} 列。\n"
+    L"提示:分支只影响本行走哪段流程,本轮结束后自动处理下一行。",
+};
+
+/* 说明文字行数(按换行符计数) */
+static int help_lines(const wchar_t *s)
+{
+    int n = 1;
+    for (const wchar_t *p = s; *p; p++)
+        if (*p == L'\n') n++;
+    return n;
+}
 
 static void layout_rows(int type)
 {
@@ -413,6 +480,17 @@ static void layout_rows(int type)
     place(IDC_LB_NOTE, CT_X + 106, y + 2, 32, 20);
     place(IDC_NOTE, CT_X + 142, y, 106, 22);
     y += ROW_H;
+
+    /* 行:按类型的通俗填写说明(灰字多行,高度自适应) */
+    {
+        const wchar_t *ht = (type >= 0 && type < ACT_TYPE_COUNT_) ?
+                            TYPE_HELP[type] : L"";
+        set_ctl_text(IDC_TYPEHELP, ht);
+        show_ctl(IDC_TYPEHELP, 1);
+        int hl = help_lines(ht);
+        place(IDC_TYPEHELP, LB_X, y, DLG_CW - LB_X - 8, hl * 15 + 4);
+        y += hl * 15 + 10;
+    }
 
     /* 底部按钮 */
     y += 6;
@@ -704,7 +782,10 @@ static LRESULT CALLBACK edit_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     case WM_CTLCOLORSTATIC:
         SetBkColor((HDC)wp, CARD_BG);
-        SetTextColor((HDC)wp, RGB(0x3A,0x3A,0x3A));
+        if (GetDlgCtrlID((HWND)lp) == IDC_TYPEHELP)
+            SetTextColor((HDC)wp, RGB(0x90,0x90,0x90));   /* 说明文字用浅灰 */
+        else
+            SetTextColor((HDC)wp, RGB(0x3A,0x3A,0x3A));
         return (LRESULT)GetStockObject(WHITE_BRUSH);
 
     case WM_CTLCOLORBTN:
@@ -786,6 +867,9 @@ static void build_controls(void)
     /* 启用 + 备注 */
     g_edit.ctl[IDC_LB_NOTE - 100] = mk_ctl(L"STATIC", L"备注", 0, IDC_LB_NOTE, 32, 20);
     CTL(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, IDC_NOTE, 106, 22);
+
+    /* 按类型说明区(灰字多行) */
+    g_edit.ctl[IDC_TYPEHELP - 100] = mk_ctl(L"STATIC", L"", 0, IDC_TYPEHELP, 420, 90);
 
     /* 底部按钮 */
     CTL(L"BUTTON", L"取消", BS_OWNERDRAW, IDCANCEL, 86, 28);
