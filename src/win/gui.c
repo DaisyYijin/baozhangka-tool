@@ -90,6 +90,7 @@ static HBRUSH g_hbrBg, g_hbrCard;
 static TaskBook g_taskbook;                 /* 任务簿(8 TAB) */
 #define g_task (g_taskbook.tasks[g_curTask])/* 当前任务(旧代码无缝适配) */
 static int  g_running = 0;
+static int  g_hiddenByRun = 0;     /* 执行期间自动隐藏主窗(结束后恢复;悬浮窗模式不隐藏) */
 static HANDLE g_thread = NULL;
 static int  g_page = 0;        /* 0=任务页 1=日志页 */
 
@@ -925,6 +926,12 @@ static void start_run(void)
     g_stop_flag = 0;
     g_running = 1;
     marks_set_visible(0);           /* 执行中隐藏标记,点击直达目标 */
+    /* 执行期间隐身:隐藏主窗(任务栏图标随之消失),结束后自动恢复;
+       Ctrl+F12 全局热键仍可停止;悬浮窗模式主窗本就隐藏,不参与 */
+    if (IsWindowVisible(g_hMain)) {
+        g_hiddenByRun = 1;
+        ShowWindow(g_hMain, SW_HIDE);
+    }
 
     for (int i = 6; i <= 12; i++)
         if (g_hBtn[i]) EnableWindow(g_hBtn[i], FALSE);
@@ -955,6 +962,11 @@ static void run_finished(WPARAM r)
 {
     g_running = 0;
     marks_set_visible(1);           /* 恢复屏幕标记 */
+    if (g_hiddenByRun) {            /* 恢复执行期间隐藏的主窗口 */
+        g_hiddenByRun = 0;
+        ShowWindow(g_hMain, SW_SHOW);
+        SetForegroundWindow(g_hMain);
+    }
     if (g_thread) { WaitForSingleObject(g_thread, 2000); CloseHandle(g_thread); g_thread = NULL; }
     for (int i = 6; i <= 12; i++)
         if (g_hBtn[i]) EnableWindow(g_hBtn[i], TRUE);
