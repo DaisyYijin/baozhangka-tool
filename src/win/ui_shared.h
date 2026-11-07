@@ -34,6 +34,8 @@ extern int g_mark_seq;            /* 当前编辑中步骤的序号(1 起) */
 /* 编辑窗「导入Excel数据」:选文件并记录工作表名单(不弹选择框)。
    返回工作表数(xlsx),0=CSV,-1=取消/失败 */
 int gui_pick_excel_file(HWND owner);
+/* 按路径直接绑定 Excel 数据源(拖拽导入用);返回工作表数,失败 -1 */
+int gui_bind_excel_path(const wchar_t *path);
 /* 按当前绑定文件与选择重新收集数据源;col=0 第1列含首行,col>=1 该列跳表头行 */
 int gui_rebind_excel(int sheet, int col);
 /* 当前绑定文件的工作表信息 */

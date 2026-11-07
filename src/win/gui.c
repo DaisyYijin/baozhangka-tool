@@ -1368,6 +1368,7 @@ int gui_rebind_excel(int sheet, int col)
 
 /* 编辑窗「导入Excel数据」第一步:选择文件并记录工作表名单。
    返回工作表数(xlsx),0=CSV 文件,-1=取消/失败。后续由编辑框控件驱动 */
+int gui_bind_excel_path(const wchar_t *path); /* 定义在本文件后部 */
 int gui_pick_excel_file(HWND owner)
 {
     wchar_t path[MAX_PATH] = L"";
@@ -1381,7 +1382,13 @@ int gui_pick_excel_file(HWND owner)
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
     ofn.lpstrTitle = L"选择 Excel 数据(取第一列每行)";
     if (!GetOpenFileNameW(&ofn)) return -1;
+    return gui_bind_excel_path(path);
+}
 
+/* 按路径绑定 Excel 数据源(编辑框点击选择与拖拽共用):
+   记录文件/工作表名单并预解析列名,返回工作表数(CSV=0),失败 -1 */
+int gui_bind_excel_path(const wchar_t *path)
+{
     size_t len = 0;
     unsigned char *data = read_file_all(path, &len);
     if (!data) { msg_err(L"无法读取文件。"); return -1; }

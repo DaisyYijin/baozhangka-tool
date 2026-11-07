@@ -12,6 +12,7 @@
 #include "ac_keys.h"
 #include "picker.h"
 #include "dlg_edit.h"
+#include <shellapi.h>
 #include "ui_shared.h"
 #include "u8.h"
 #include "findimg.h"
@@ -781,6 +782,28 @@ static LRESULT CALLBACK edit_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;
     }
 
+    case WM_DROPFILES: {
+        /* 拖拽 Excel 到编辑框 = 绑定数据源(与「导入Excel数据」按钮共用) */
+        wchar_t dpath[MAX_PATH] = L"";
+        if (DragQueryFileW((HDROP)wp, 0, dpath, MAX_PATH) > 0) {
+            const wchar_t *dot = wcsrchr(dpath, L'.');
+            if (dot && (_wcsicmp(dot, L".xlsx") == 0 || _wcsicmp(dot, L".csv") == 0 ||
+                        _wcsicmp(dot, L".txt") == 0)) {
+                if (gui_bind_excel_path(dpath) >= 0) {
+                    fill_imp_controls(gui_excel_cur_sheet(), gui_excel_cur_col());
+                    if (g_edit.step && g_edit.step->type == ACT_TEXT) {
+                        show_ctl(IDC_IMPSHEET, 1);
+                        show_ctl(IDC_IMPCOL, 1);
+                    }
+                }
+            } else {
+                MessageBoxW(g_edit.hwnd, L"仅支持拖入 .xlsx / .csv / .txt 文件。",
+                            L"提示", MB_ICONINFORMATION);
+            }
+        }
+        DragFinish((HDROP)wp);
+        return 0;
+    }
     case WM_CTLCOLORSTATIC:
         SetBkColor((HDC)wp, CARD_BG);
         if (GetDlgCtrlID((HWND)lp) == IDC_TYPEHELP)
@@ -1388,6 +1411,7 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
         cx, cy, TP_W + 16, TP_CH + 34,
         owner, NULL, wc.hInstance, NULL);
     if (!g_edit.hwnd) return 0;
+    DragAcceptFiles(g_edit.hwnd, TRUE);     /* 支持拖拽 Excel 到编辑框绑定数据源 */
 
     build_controls();
 
