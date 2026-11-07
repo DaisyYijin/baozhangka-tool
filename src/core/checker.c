@@ -7,6 +7,11 @@
 #include "checker.h"
 #include "u8.h"
 
+/* Windows CRT 的 _snwprintf -> C99 swprintf(参数序一致) */
+#ifndef _WIN32
+#define _snwprintf swprintf
+#endif
+
 /* ---------- 字段标准化 ---------- */
 
 /* 去括号/空格/横线(全半角) */
