@@ -940,6 +940,17 @@ static void draw_type_icon(HDC dc, int x, int y, int type)
         DeleteObject(sp);
         break;
     }
+    case ACT_FINDIMG: {
+        /* 找图:虚线选框(框选模板) + 中心准星 */
+        HPEN dp = CreatePen(PS_DASH, 2, col);
+        SelectObject(dc, dp);
+        Rectangle(dc, x + 4, y + 6, x + 28, y + 26);
+        SelectObject(dc, pen);
+        DeleteObject(dp);
+        MoveToEx(dc, x + 12, y + 16, NULL); LineTo(dc, x + 20, y + 16);
+        MoveToEx(dc, x + 16, y + 12, NULL); LineTo(dc, x + 16, y + 20);
+        break;
+    }
     case ACT_WAITWIN: {
         /* 窗形 + 沙漏:等待窗口 */
         Rectangle(dc, x + 4, y + 6, x + 30, y + 26);
