@@ -348,6 +348,52 @@ char *win_gbk_to_utf8(const char *raw, size_t rawLen)
 }
 
 /* 供 GUI 使用的平台操作集 */
+/* 屏幕区域灰度图(0-255);w/h<=0 表示到屏幕右下;返回 malloc(w*h) */
+unsigned char *win_grab_gray(int x, int y, int w, int h, int *ow, int *oh)
+{
+    int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (w <= 0 || x + w > sw) w = sw - x;
+    if (h <= 0 || y + h > sh) h = sh - y;
+    if (w <= 0 || h <= 0) return NULL;
+    HDC dc = GetDC(NULL);
+    HDC mem = CreateCompatibleDC(dc);
+    BITMAPINFO bi;
+    memset(&bi, 0, sizeof(bi));
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -h;              /* 自上而下 */
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 24;
+    void *bits = NULL;
+    HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    unsigned char *out = NULL;
+    if (bmp && bits) {
+        HBITMAP old = (HBITMAP)SelectObject(mem, bmp);
+        BitBlt(mem, 0, 0, w, h, dc, x, y, SRCCOPY);
+        SelectObject(mem, old);
+        out = (unsigned char *)malloc((size_t)w * h);
+        if (out) {
+            int stride = (w * 3 + 3) & ~3;   /* 24bpp 行 4 字节对齐 */
+            for (int yy = 0; yy < h; yy++) {
+                const unsigned char *row = (const unsigned char *)bits + (size_t)yy * stride;
+                for (int xx = 0; xx < w; xx++) {
+                    const unsigned char *px = row + xx * 3;   /* BGR */
+                    out[(size_t)yy * w + xx] = (unsigned char)
+                        ((px[2] * 38 + px[1] * 75 + px[0] * 13) >> 7);
+                }
+            }
+            if (ow) *ow = w;
+            if (oh) *oh = h;
+        }
+    }
+    if (bmp) DeleteObject(bmp);
+    DeleteDC(mem);
+    ReleaseDC(NULL, dc);
+    return out;
+}
+
 Platform *win_platform(void)
 {
     static Platform p;
@@ -363,6 +409,7 @@ Platform *win_platform(void)
         p.sleep_ms     = win_sleep_ms;
         p.rand         = win_rand;
         p.get_pixel    = win_get_pixel;
+        p.grab_gray    = win_grab_gray;
         p.find_window  = win_find_window;
         p.ocr_region   = win_ocr_region;
         p.stop         = &g_stop_flag;

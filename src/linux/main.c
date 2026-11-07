@@ -24,6 +24,7 @@
 #include "import.h"
 #include "u8.h"
 #include "platform_x11.h"
+#include "findimg.h"
 #include "xui.h"
 
 #undef MIN
@@ -118,6 +119,11 @@ static void refresh_list(void)
         case ACT_RCLICK: case ACT_MCLICK: case ACT_SCROLL:
             snprintf(coordStr, sizeof(coordStr), "(%d,%d)", s->x, s->y);
             break;
+        case ACT_FINDIMG:
+            snprintf(coordStr, sizeof(coordStr), s->w > 0 ?
+                     "\xe5\x8c\xba\xe5\x9f\x9f(%d,%d)" :          /* 区域(x,y) */
+                     "\xe5\x85\xa8\xe5\xb1\x8f", s->x, s->y);      /* 全屏 */
+            break;
         default:
             snprintf(coordStr, sizeof(coordStr), "\xe2\x80\x94");   /* — */
             break;
@@ -129,6 +135,14 @@ static void refresh_list(void)
         }
         if (s->type == ACT_DRAG)
             snprintf(text, sizeof(text), "\xe2\x86\x92 \xe7\xbb\x88\xe7\x82\xb9(%d, %d)", s->x2, s->y2);
+        else if (s->type == ACT_FINDIMG && s->imgB64 && s->imgB64[0]) {
+            int tw2 = 0, th2 = 0;
+            if (findimg_unpack(s->imgB64, NULL, NULL, NULL, NULL, &tw2, &th2))
+                snprintf(text, sizeof(text),
+                         "\xe6\xa8\xa1\xe6\x9d\xbf %dx%d", tw2, th2);   /* 模板 WxH */
+            else
+                text[0] = 0;
+        }
         else
             wcs_to_u8(s->text, text, sizeof(text) - 1);
         snprintf(delayStr, sizeof(delayStr), "%d / %d", s->delayBefore, s->delayAfter);
@@ -379,6 +393,11 @@ typedef struct {
     XuiWgt *type, *x, *y, *count, *interval, *text, *scroll;
     XuiWgt *x2, *y2, *db, *da, *clear;
     XuiWgt *lb_xy, *lb_cnt, *lb_text, *lb_scroll, *lb_xy2, *lb_delay;
+    XuiWgt *lb_wh, *w, *h;              /* 找图:搜索区宽高 */
+    XuiWgt *btn_tpl, *tplinfo;          /* 找图:框选模板 */
+    XuiWgt *lb_miss, *miss;             /* 找图:未找到跳转 */
+    char *tplB64;
+    int tplW, tplH;
     Step *s;
 } EditBox;
 
@@ -393,6 +412,7 @@ static const struct { int type; const char *cn; } EDIT_TYPES[] = {
     { ACT_WAIT,    "\xe7\xad\x89\xe5\xbe\x85" },                                 /* 等待 */
     { ACT_SCROLL,  "\xe6\xbb\x9a\xe8\xbd\xae" },                                 /* 滚轮 */
     { ACT_DRAG,    "\xe9\xbc\xa0\xe6\xa0\x87\xe6\x8b\x96\xe5\x8a\xa8" },         /* 鼠标拖动 */
+    { ACT_FINDIMG, "\xe6\x89\xbe\xe5\x9b\xbe" },                                 /* 找图 */
 };
 #define EDIT_TYPE_N ((int)(sizeof(EDIT_TYPES) / sizeof(EDIT_TYPES[0])))
 
@@ -403,12 +423,13 @@ static void edit_apply_type(EditBox *eb)
                    type == ACT_RCLICK || type == ACT_MCLICK);
     int multi = type == ACT_MULTI, scroll = type == ACT_SCROLL, drag = type == ACT_DRAG;
     int text = (type == ACT_TEXT || type == ACT_KEY);
-    xui_show(eb->lb_xy, isClick || scroll || drag);
-    xui_show(eb->x, isClick || scroll || drag);
-    xui_show(eb->y, isClick || scroll || drag);
-    xui_show(eb->lb_cnt, multi);
-    xui_show(eb->count, multi);
-    xui_show(eb->interval, multi);
+    int findimg = (type == ACT_FINDIMG);
+    xui_show(eb->lb_xy, isClick || scroll || drag || findimg);
+    xui_show(eb->x, isClick || scroll || drag || findimg);
+    xui_show(eb->y, isClick || scroll || drag || findimg);
+    xui_show(eb->lb_cnt, multi || findimg);
+    xui_show(eb->count, multi || findimg);
+    xui_show(eb->interval, multi || findimg);
     xui_show(eb->lb_text, text);
     xui_show(eb->text, text);
     xui_show(eb->clear, type == ACT_TEXT);
@@ -417,6 +438,14 @@ static void edit_apply_type(EditBox *eb)
     xui_show(eb->lb_xy2, drag);
     xui_show(eb->x2, drag);
     xui_show(eb->y2, drag);
+    /* 找图:搜索区/模板/未找到跳转 */
+    xui_show(eb->lb_wh, findimg);
+    xui_show(eb->w, findimg);
+    xui_show(eb->h, findimg);
+    xui_show(eb->btn_tpl, findimg);
+    xui_show(eb->tplinfo, findimg);
+    xui_show(eb->lb_miss, findimg);
+    xui_show(eb->miss, findimg);
     xui_set_text(eb->lb_delay, type == ACT_WAIT ?
                  "\xe7\xad\x89\xe5\xbe\x85\xe6\x97\xb6\xe9\x95\xbf(\xe6\xaf\xab\xe7\xa7\x92):" :   /* 等待时长 */
                  "\xe5\x89\x8d\xe5\xbb\xb6\xe6\x97\xb6 / \xe5\x90\x8e\xe5\xbb\xb6\xe6\x97\xb6(ms):"); /* 前延时/后延时 */
@@ -437,6 +466,41 @@ static void edit_on_pick(XuiWgt *w, void *ud)
     }
 }
 
+/* 找图:全屏拖框截取模板图像(灰度打包) */
+static void edit_on_picktpl(XuiWgt *w, void *ud)
+{
+    EditBox *eb = (EditBox *)ud; (void)w;
+    PickRect r;
+    if (!pick_screen_point(&r)) return;
+    if (r.w < 2 || r.h < 2) {
+        show_info("\xe8\xaf\xb7\xe6\x8b\x96\xe5\x8a\xa8\xe6\xa1\x86\xe9\x80\x89\xe4\xb8\x80\xe5\x9d\x97\xe5\x9b\xbe\xe5\x83\x8f\xe4\xbd\x9c\xe4\xb8\xba\xe6\xa8\xa1\xe6\x9d\xbf"
+                  "(\xe5\x8d\x95\xe5\x87\xbb\xe6\x97\xa0\xe6\x95\x88)\xe3\x80\x82");   /* 请拖动框选一块图像作为模板(单击无效)。 */
+        return;
+    }
+    int ow = 0, oh = 0;
+    unsigned char *gray = x_grab_gray(r.x, r.y, r.w, r.h, &ow, &oh);
+    if (!gray) {
+        show_err("\xe6\x8a\x93\xe5\x8f\x96\xe5\xb1\x8f\xe5\xb9\x95\xe5\x9b\xbe\xe5\x83\x8f\xe5\xa4\xb1\xe8\xb4\xa5\xe3\x80\x82");   /* 抓取屏幕图像失败。 */
+        return;
+    }
+    char *packed = findimg_pack(atoi(xui_entry_text(eb->w)),
+                                atoi(xui_entry_text(eb->h)),
+                                atoi(xui_entry_text(eb->miss)),
+                                gray, ow, oh);
+    free(gray);
+    if (!packed) {
+        show_err("\xe6\xa8\xa1\xe6\x9d\xbf\xe8\xbf\x87\xe5\xa4\xa7(\xe4\xb8\x8a\xe9\x99\x90\xe7\xba\xa6 128x128 \xe5\x83\x8f\xe7\xb4\xa0)\xe3\x80\x82");  /* 模板过大 */
+        return;
+    }
+    free(eb->tplB64);
+    eb->tplB64 = packed;
+    eb->tplW = ow;
+    eb->tplH = oh;
+    char ti[48];
+    snprintf(ti, sizeof(ti), "\xe5\xb7\xb2\xe6\xa1\x86\xe9\x80\x89 %dx%d", ow, oh);   /* 已框选 */
+    xui_set_text(eb->tplinfo, ti);
+}
+
 static void edit_on_ok(XuiWgt *w, void *ud)
 {
     EditBox *eb = (EditBox *)ud; (void)w;
@@ -455,6 +519,24 @@ static void edit_on_ok(XuiWgt *w, void *ud)
     s->delayAfter = atoi(xui_entry_text(eb->da));
     s->clearFirst = xui_checked(eb->clear) ? 1 : 0;
     u8_to_wcs(xui_entry_text(eb->text), s->text, AC_TEXT_MAX - 1);
+    if (s->type == ACT_FINDIMG) {
+        s->w = atoi(xui_entry_text(eb->w));
+        s->h = atoi(xui_entry_text(eb->h));
+        if (s->w < 0) s->w = 0;
+        if (s->h < 0) s->h = 0;
+        s->ifColor = 0;
+        s->ifTol = atoi(xui_entry_text(eb->interval));
+        s->missJump = atoi(xui_entry_text(eb->miss));
+        free(s->imgB64);
+        s->imgB64 = eb->tplB64 ? strdup(eb->tplB64) : NULL;
+        if (!s->imgB64) {
+            show_info("\xe8\xaf\xb7\xe5\x85\x88\xe7\x82\xb9\xe3\x80\x8c\xe6\xa1\x86\xe9\x80\x89\xe6\xa8\xa1\xe6\x9d\xbf\xe3\x80\x8d"
+                      "\xe6\x88\xaa\xe5\x8f\x96\xe8\xa6\x81\xe6\x9f\xa5\xe6\x89\xbe\xe7\x9a\x84\xe5\x9b\xbe\xe5\x83\x8f\xe3\x80\x82"); /* 请先点「框选模板」截取要查找的图像。 */
+            return;                     /* 不关闭对话框 */
+        }
+    } else {
+        s->missJump = 0;
+    }
     xui_window_exit(eb->dlg, 1);
 }
 static void edit_on_cancel(XuiWgt *w, void *ud)
@@ -466,7 +548,7 @@ static void edit_on_cancel(XuiWgt *w, void *ud)
 /* 编辑步骤对话框,返回 1=确定 */
 static int edit_step_dialog(Step *s, int isNew)
 {
-    XuiWin *dlg = xui_window_new(g_ui, 520, 390,
+    XuiWin *dlg = xui_window_new(g_ui, 520, 470,
                                  isNew ? "\xe6\xb7\xbb\xe5\x8a\xa0\xe6\xad\xa5\xe9\xaa\xa4"
                                        : "\xe7\xbc\x96\xe8\xbe\x91\xe6\xad\xa5\xe9\xaa\xa4");
     if (!dlg) return 0;
@@ -475,18 +557,37 @@ static int edit_step_dialog(Step *s, int isNew)
     eb.dlg = dlg; eb.s = s;
 
     char xs[32], ys[32], cs[32], is[32], ss[32], x2s[32], y2s[32], dbs[32], das[32];
+    char ws[32], hs[32], missS[32];
     char textU8[AC_TEXT_MAX * 3 + 8];
     textU8[0] = 0;
     if (s->text[0]) wcs_to_u8(s->text, textU8, sizeof(textU8) - 1);
     snprintf(xs, sizeof(xs), "%d", s->x);
     snprintf(ys, sizeof(ys), "%d", s->y);
-    snprintf(cs, sizeof(cs), "%d", s->count > 0 ? s->count : 3);
-    snprintf(is, sizeof(is), "%d", s->interval > 0 ? s->interval : 100);
+    snprintf(cs, sizeof(cs), "%d", s->count > 0 ? s->count : 1);
+    snprintf(is, sizeof(is), "%d", s->interval > 0 ? s->interval : 20);
     snprintf(ss, sizeof(ss), "%d", s->scroll != 0 ? s->scroll : 3);
     snprintf(x2s, sizeof(x2s), "%d", s->x2);
     snprintf(y2s, sizeof(y2s), "%d", s->y2);
     snprintf(dbs, sizeof(dbs), "%d", s->delayBefore);
     snprintf(das, sizeof(das), "%d", s->delayAfter);
+    snprintf(ws, sizeof(ws), "%d", s->w);
+    snprintf(hs, sizeof(hs), "%d", s->h);
+    snprintf(missS, sizeof(missS), "%d", s->missJump);
+    char tplInit[48];
+    tplInit[0] = 0;
+    if (s->type == ACT_FINDIMG && s->imgB64 && s->imgB64[0]) {
+        int tw2 = 0, th2 = 0;
+        if (findimg_unpack(s->imgB64, NULL, NULL, NULL, NULL, &tw2, &th2)) {
+            eb.tplB64 = strdup(s->imgB64);
+            eb.tplW = tw2;
+            eb.tplH = th2;
+            snprintf(tplInit, sizeof(tplInit),
+                     "\xe5\xb7\xb2\xe6\xa1\x86\xe9\x80\x89 %dx%d", tw2, th2);   /* 已框选 */
+        }
+    }
+    if (!tplInit[0])
+        snprintf(tplInit, sizeof(tplInit),
+                 "\xe6\x9c\xaa\xe6\xa1\x86\xe9\x80\x89");                        /* 未框选 */
 
     int L = 8, W1 = 120, EH = 26;     /* 左标签x, 标签宽, 控件高 */
     xui_label(dlg, L, 14, W1, EH, "\xe5\x8a\xa8\xe4\xbd\x9c\xe7\xb1\xbb\xe5\x9e\x8b:");   /* 动作类型: */
@@ -503,6 +604,18 @@ static int edit_step_dialog(Step *s, int isNew)
     eb.lb_xy = xui_label(dlg, L, y + 2, W1, EH, "\xe5\x9d\x90\xe6\xa0\x87 X / Y:");      /* 坐标 X/Y: */
     txy.ex = eb.x = xui_entry(dlg, L + W1 + 6, y, 70, EH, xs);
     txy.ey = eb.y = xui_entry(dlg, L + W1 + 82, y, 70, EH, ys);
+
+    y += 36;
+    eb.lb_wh = xui_label(dlg, L, y + 2, W1, EH,
+                         "\xe6\x90\x9c\xe7\xb4\xa2\xe5\x8c\xba W/H(0=\xe5\x85\xa8\xe5\xb1\x8f):");  /* 搜索区 W/H(0=全屏): */
+    eb.w = xui_entry(dlg, L + W1 + 6, y, 70, EH, ws);
+    eb.h = xui_entry(dlg, L + W1 + 82, y, 70, EH, hs);
+
+    y += 36;
+    eb.btn_tpl = xui_button(dlg, L + W1 + 6, y, 108, EH,
+                            "\xe2\x89\xa1 \xe6\xa1\x86\xe9\x80\x89\xe6\xa8\xa1\xe6\x9d\xbf",   /* ≡ 框选模板 */
+                            edit_on_picktpl, &eb);
+    eb.tplinfo = xui_label(dlg, L + W1 + 122, y + 2, 160, EH, tplInit);
 
     y += 36;
     eb.lb_cnt = xui_label(dlg, L, y + 2, W1, EH, "\xe6\xac\xa1\xe6\x95\xb0 / \xe9\x97\xb4\xe9\x9a\x94(ms):"); /* 次数/间隔 */
@@ -523,6 +636,11 @@ static int edit_step_dialog(Step *s, int isNew)
     eb.scroll = xui_entry(dlg, L + W1 + 6, y, 70, EH, ss);
 
     y += 36;
+    eb.lb_miss = xui_label(dlg, L, y + 2, W1, EH,
+                           "\xe6\x9c\xaa\xe6\x89\xbe\xe5\x88\xb0\xe8\xb7\xb3\xe8\xbd\xac(0=\xe7\xbb\xa7\xe7\xbb\xad):");  /* 未找到跳转(0=继续): */
+    eb.miss = xui_entry(dlg, L + W1 + 6, y, 70, EH, missS);
+
+    y += 36;
     eb.lb_xy2 = xui_label(dlg, L, y + 2, W1, EH, "\xe6\x8b\x96\xe5\x8a\xa8\xe7\xbb\x88\xe7\x82\xb9 X / Y:"); /* 拖动终点 */
     txy2.ex = eb.x2 = xui_entry(dlg, L + W1 + 6, y, 70, EH, x2s);
     txy2.ey = eb.y2 = xui_entry(dlg, L + W1 + 82, y, 70, EH, y2s);
@@ -533,12 +651,14 @@ static int edit_step_dialog(Step *s, int isNew)
     eb.db = xui_entry(dlg, L + W1 + 6, y, 70, EH, dbs);
     eb.da = xui_entry(dlg, L + W1 + 82, y, 70, EH, das);
 
-    XuiWgt *bOk = xui_button(dlg, 344, 348, 78, 30, "\xe7\xa1\xae\xe5\xae\x9a", edit_on_ok, &eb);       /* 确定 */
-    XuiWgt *bCancel = xui_button(dlg, 430, 348, 78, 30, "\xe5\x8f\x96\xe6\xb6\x88", edit_on_cancel, &eb); /* 取消 */
+    XuiWgt *bOk = xui_button(dlg, 344, 418, 78, 30, "\xe7\xa1\xae\xe5\xae\x9a", edit_on_ok, &eb);       /* 确定 */
+    XuiWgt *bCancel = xui_button(dlg, 430, 418, 78, 30, "\xe5\x8f\x96\xe6\xb6\x88", edit_on_cancel, &eb); /* 取消 */
     xui_window_set_default(dlg, bOk, bCancel);
 
     edit_apply_type(&eb);
-    return xui_window_run(dlg);
+    int rr = xui_window_run(dlg);
+    free(eb.tplB64);
+    return rr;
 }
 
 /* ================= 文件操作 ================= */

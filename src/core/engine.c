@@ -9,6 +9,7 @@
 #endif
 #include "engine.h"
 #include "ac_keys.h"
+#include "findimg.h"
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
@@ -31,6 +32,7 @@ static const struct { const wchar_t *cn; const wchar_t *en; } ACT_NAMES[] = {
     { L"判断",   L"check" },
     { L"调用",   L"call" },
     { L"读文本", L"ocr" },
+    { L"找图",   L"findimg" },
 };
 
 const wchar_t *act_type_name(int type)
@@ -73,6 +75,7 @@ int act_type_from_name(const wchar_t *name)
         { L"滚动", ACT_SCROLL },  { L"滚轮", ACT_SCROLL },
         { L"拖动", ACT_DRAG },    { L"拖拽", ACT_DRAG },
         { L"跳转", ACT_JUMP },    { L"转到", ACT_JUMP },
+        { L"找图", ACT_FINDIMG }, { L"图片查找", ACT_FINDIMG },
     };
     for (int i = 0; i < (int)(sizeof(CN_ALIAS) / sizeof(CN_ALIAS[0])); i++)
         if (wci_eq(name, CN_ALIAS[i].alias)) return CN_ALIAS[i].type;
@@ -93,6 +96,9 @@ void task_init(Task *t)
 
 void task_free(Task *t)
 {
+    if (t->steps) {
+        for (int i = 0; i < t->count; i++) free(t->steps[i].imgB64);
+    }
     free(t->steps);
     free(t->dataColNames);
     t->dataColNames = NULL;
@@ -122,6 +128,7 @@ int task_add(Task *t, const Step *s)
 void task_remove(Task *t, int index)
 {
     if (index < 0 || index >= t->count) return;
+    free(t->steps[index].imgB64);
     memmove(&t->steps[index], &t->steps[index + 1],
             (size_t)(t->count - index - 1) * sizeof(Step));
     t->count--;
@@ -157,6 +164,9 @@ void task_move_to(Task *t, int src, int dst)
 
 void task_clear(Task *t)
 {
+    if (t->steps) {
+        for (int i = 0; i < t->count; i++) free(t->steps[i].imgB64);
+    }
     t->count = 0;
 }
 
@@ -414,6 +424,61 @@ continue_loop:
                             i = s->jumpTo - 2;
                         }
                     }
+                }
+                break;
+            }
+            case ACT_FINDIMG: {
+                /* 找图:(x,y,w,h)=搜索区(w/h=0→全屏到屏幕边);
+                   count=找到动作(0=定位 1=单击 2=双击);ifTol=灰度容差(0-255);
+                   找到→按 jumpTo/jumpTab 跳转(0=继续);未找到→missJump 跳转(0=继续) */
+                int found = 0, fx = 0, fy = 0;
+                if (s->imgB64 && s->imgB64[0] && p->grab_gray) {
+                    int tww = 0, thh = 0;
+                    unsigned char *tpl = NULL;
+                    if (findimg_unpack(s->imgB64, NULL, NULL, NULL,
+                                       &tpl, &tww, &thh) && tpl) {
+                        int gx = s->x, gy = s->y;
+                        int gw = s->w > 0 ? s->w : 0;
+                        int gh = s->h > 0 ? s->h : 0;
+                        int sw2 = 0, sh2 = 0;
+                        unsigned char *scr = p->grab_gray(gx, gy, gw, gh, &sw2, &sh2);
+                        if (scr && sw2 > 0 && sh2 > 0) {
+                            int tol4 = s->ifTol >> 4;
+                            if (s->ifTol > 0 && tol4 < 1) tol4 = 1;
+                            found = findimg_search(scr, sw2, sh2, tpl, tww, thh,
+                                                   tol4, 0, 0, sw2, sh2, &fx, &fy);
+                            if (found) { fx += gx; fy += gy; }
+                        }
+                        free(scr);
+                    }
+                    free(tpl);
+                }
+                if (found) {
+                    p->mouse_move(fx, fy);
+                    if (s->count >= 1) {
+                        esleep(p, 50);
+                        p->mouse_down(BTN_LEFT);
+                        p->mouse_up(BTN_LEFT);
+                        if (s->count >= 2) {
+                            esleep(p, 60);
+                            p->mouse_down(BTN_LEFT);
+                            p->mouse_up(BTN_LEFT);
+                        }
+                    }
+                    if (s->jumpTo >= 1) {
+                        if (++jumps > 10000) return ENGINE_DONE;
+                        if (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS &&
+                            tb->tasks[s->jumpTab - 1].count > 0 &&
+                            s->jumpTo <= tb->tasks[s->jumpTab - 1].count) {
+                            cur = &tb->tasks[s->jumpTab - 1];
+                            i = s->jumpTo - 2;
+                        } else if (s->jumpTo <= cur->count) {
+                            i = s->jumpTo - 2;
+                        }
+                    }
+                } else if (s->missJump >= 1 && s->missJump <= cur->count) {
+                    if (++jumps > 10000) return ENGINE_DONE;
+                    i = s->missJump - 2;
                 }
                 break;
             }

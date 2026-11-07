@@ -34,6 +34,7 @@ enum {
     ACT_CHECK,       /* 判断 (x,y) 颜色:满足→跳转(jumpTo/jumpTab),否则继续 */
     ACT_CALL,        /* 子流程调用:执行目标TAB后返回调用处下一步 */
     ACT_OCR,         /* 读文本:区域识别(ocr_region 钩子);含关键词则跳转 */
+    ACT_FINDIMG,     /* 找图:模板图像匹配;找到→定位/点击(可跳转),未找到→可跳转 */
     ACT_TYPE_COUNT_
 };
 
@@ -56,8 +57,10 @@ typedef struct {
     int      jumpTo;                  /* 跳转/调用/判断:目标步骤序号(1 起) */
     int      jumpTab;                 /* 跳转/调用/判断:目标任务(0=当前,1~8=TAB) */
     int      ifColor;                 /* 判断:目标色 0xRRGGBB */
-    int      ifTol;                   /* 判断:每通道容差(0~255) */
+    int      ifTol;                   /* 判断:每通道容差(0~255);找图:灰度容差 */
     wchar_t  note[AC_NOTE_MAX];       /* 备注 */
+    int      missJump;                /* 找图:未找到时跳转的步骤号(0=继续) */
+    char    *imgB64;                  /* 找图:模板序列化(findimg_pack;malloc,任务持有) */
 } Step;
 
 /* ---- 任务(步骤列表+全局设置) ---- */
@@ -93,6 +96,8 @@ typedef struct {
     int          (*find_window)(const wchar_t *titleContains); /* 标题包含返回1;NULL=不支持(视为1) */
     int          (*ocr_region)(int x, int y, int w, int h,     /* 区域文本识别;返回1=out 为识别文本,0=失败;NULL=不支持 */
                                wchar_t *out, int cap);
+    unsigned char *(*grab_gray)(int x, int y, int w, int h,    /* 屏幕灰度图(0-255),malloc;w/h<=0=到屏幕边;*ow/*oh 出实际尺寸;NULL=不支持 */
+                                int *ow, int *oh);
     volatile int *stop;                           /* 停止标志(非0=请求停止) */
 } Platform;
 

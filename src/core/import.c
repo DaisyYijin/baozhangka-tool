@@ -3,6 +3,7 @@
  * ============================================================ */
 #include "import.h"
 #include "engine.h"
+#include "findimg.h"
 #include "u8.h"
 #include <stdlib.h>
 #include <string.h>
@@ -25,7 +26,7 @@ enum {
     COL_ACTION = 0, COL_X, COL_Y, COL_W, COL_H,
     COL_COUNT, COL_INTERVAL, COL_TEXT,
     COL_DELAY_BEFORE, COL_DELAY_AFTER, COL_CLEAR,
-    COL_JUMP, COL_NOTE,
+    COL_JUMP, COL_NOTE, COL_IMG,
     COL_COUNT_
 };
 
@@ -43,6 +44,7 @@ static const wchar_t *HEADER_ALIASES[COL_COUNT_][6] = {
     [COL_CLEAR]        = { L"清空", L"输入前清空", L"clear", NULL },
     [COL_JUMP]         = { L"跳转", L"跳转到", L"jump", NULL },
     [COL_NOTE]         = { L"备注", L"note", NULL },
+    [COL_IMG]          = { L"模板", L"找图", L"image", L"img", NULL },
 };
 
 static int ci_eq(const wchar_t *a, const wchar_t *b)
@@ -336,6 +338,41 @@ int task_import_sheet(Task *t, const Sheet *s, int append)
             }
         }
 
+        if (type == ACT_FINDIMG) {
+            /* 次数列=找到动作(0定位/1单击/2双击,通用段已填 count);
+               间隔列=灰度容差;文本列=找到跳转("5"/"3:5",照跳转写法);
+               模板列="sw,sh,missJump,base64"(原始字符直接取,绕过 wchar 缓冲) */
+            wchar_t *tx2 = textCol >= 0 ? cell_wcs(s, r, textCol) : NULL;
+            if (tx2 && tx2[0]) {
+                wchar_t *e2;
+                long v = wcstol(tx2, &e2, 10);
+                if (e2 != tx2 && v > 0) {
+                    st.jumpTo = (int)v;
+                    if (*e2 == L':') {
+                        long v2 = wcstol(e2 + 1, &e2, 10);
+                        if (*e2 == 0 && v2 > 0 && v <= MAX_TASKS) {
+                            st.jumpTab = (int)v;
+                            st.jumpTo = (int)v2;
+                        }
+                    }
+                }
+            }
+            st.ifTol = map[COL_INTERVAL] >= 0
+                       ? cell_int(s, r, map[COL_INTERVAL], 20) : 20;
+            int imgCol = map[COL_IMG] >= 0 ? map[COL_IMG] : 10;
+            /* 无表头(任务簿 #任务 段)时按导出位置 10 取模板列 */
+            if (imgCol < s->cols && s->cells && s->cells[r]) {
+                const char *b64 = s->cells[r][imgCol];
+                if (b64 && b64[0]) {
+                    int sw2 = 0, sh2 = 0, mj = 0;
+                    if (findimg_unpack(b64, &sw2, &sh2, &mj, NULL, NULL, NULL)) {
+                        st.w = sw2; st.h = sh2; st.missJump = mj;
+                        st.imgB64 = strdup(b64);
+                    }
+                }
+            }
+        }
+
         if (task_add(t, &st) >= 0) imported++;
     }
     return imported;
@@ -452,7 +489,8 @@ char *task_export_csv2(const Task *t, size_t *outLen,
     append_field(&buf, &len, &cap, L"前延时毫秒"); append_str(&buf, &len, &cap, ",", 1);
     append_field(&buf, &len, &cap, L"后延时毫秒"); append_str(&buf, &len, &cap, ",", 1);
     append_field(&buf, &len, &cap, L"输入前清空"); append_str(&buf, &len, &cap, ",", 1);
-    append_field(&buf, &len, &cap, L"备注");
+    append_field(&buf, &len, &cap, L"备注"); append_str(&buf, &len, &cap, ",", 1);
+    append_field(&buf, &len, &cap, L"模板");
     csv_row_end(&buf, &len, &cap);
 
     for (int i = 0; i < t->count; i++) {
@@ -465,7 +503,8 @@ char *task_export_csv2(const Task *t, size_t *outLen,
                    s->type == ACT_SCROLL ? s->scroll :
                    s->type == ACT_CHECK ? (s->ifColor & 0xFFFFFF) : s->count);
         append_str(&buf, &len, &cap, ",", 1);
-        append_int(&buf, &len, &cap, s->type == ACT_CHECK ? s->ifTol : s->interval);
+        append_int(&buf, &len, &cap,
+                   (s->type == ACT_CHECK || s->type == ACT_FINDIMG) ? s->ifTol : s->interval);
         append_str(&buf, &len, &cap, ",", 1);
         if (s->type == ACT_DRAG && (s->x2 || s->y2)) {
             wchar_t tmp[64];
@@ -477,7 +516,8 @@ char *task_export_csv2(const Task *t, size_t *outLen,
             wchar_t tmp[32];
             AC_SWPRINTF(tmp, 32, L"%dx%d", s->w, s->h);
             append_field(&buf, &len, &cap, tmp);
-        } else if ((s->type == ACT_JUMP || s->type == ACT_CALL) && s->jumpTo > 0) {
+        } else if ((s->type == ACT_JUMP || s->type == ACT_CALL ||
+                    s->type == ACT_FINDIMG) && s->jumpTo > 0) {
             wchar_t tmp[32];
             if (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
                 AC_SWPRINTF(tmp, 32, L"%d:%d", s->jumpTab, s->jumpTo);
@@ -493,6 +533,9 @@ char *task_export_csv2(const Task *t, size_t *outLen,
         append_field(&buf, &len, &cap, s->clearFirst ? L"是" : L"否");
         append_str(&buf, &len, &cap, ",", 1);
         append_field(&buf, &len, &cap, s->note);
+        append_str(&buf, &len, &cap, ",", 1);
+        if (s->imgB64 && s->imgB64[0])
+            append_str(&buf, &len, &cap, s->imgB64, strlen(s->imgB64));
         csv_row_end(&buf, &len, &cap);
     }
     if (outLen) *outLen = len;
@@ -739,7 +782,8 @@ char *taskbook_export_csv2(const TaskBook *tb, size_t *outLen,
                        s->type == ACT_CHECK ? (s->ifColor & 0xFFFFFF) : s->count);
             bk_sep(&buf, &len, &cap);
             bk_field_n(&buf, &len, &cap,
-                       s->type == ACT_CHECK ? s->ifTol : s->interval);
+                       (s->type == ACT_CHECK || s->type == ACT_FINDIMG) ?
+                       s->ifTol : s->interval);
             bk_sep(&buf, &len, &cap);
             if (s->type == ACT_OCR) {
                 bk_field_w(&buf, &len, &cap, s->text);
@@ -747,7 +791,8 @@ char *taskbook_export_csv2(const TaskBook *tb, size_t *outLen,
                 wchar_t jt[32];
                 AC_SWPRINTF(jt, 32, L"%dx%d", s->w, s->h);
                 bk_field_w(&buf, &len, &cap, jt);
-            } else if ((s->type == ACT_JUMP || s->type == ACT_CALL) && s->jumpTo > 0) {
+            } else if ((s->type == ACT_JUMP || s->type == ACT_CALL ||
+                        s->type == ACT_FINDIMG) && s->jumpTo > 0) {
                 wchar_t jt[32];
                 if (s->jumpTab >= 1 && s->jumpTab <= MAX_TASKS)
                     AC_SWPRINTF(jt, 32, L"%d:%d", s->jumpTab, s->jumpTo);
@@ -770,6 +815,9 @@ char *taskbook_export_csv2(const TaskBook *tb, size_t *outLen,
             bk_field_w(&buf, &len, &cap, s->clearFirst ? L"1" : L"");
             bk_sep(&buf, &len, &cap);
             bk_field_w(&buf, &len, &cap, s->note);
+            bk_sep(&buf, &len, &cap);
+            if (s->imgB64 && s->imgB64[0])
+                bk_append(&buf, &len, &cap, s->imgB64, strlen(s->imgB64));
             bk_row_end(&buf, &len, &cap);
         }
     }

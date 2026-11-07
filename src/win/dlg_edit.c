@@ -14,6 +14,8 @@
 #include "dlg_edit.h"
 #include "ui_shared.h"
 #include "u8.h"
+#include "findimg.h"
+#include "platform_win.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -28,6 +30,8 @@ enum {
     IDC_LB_NOTE, IDC_LB_JUMP, IDC_JUMP, IDC_JUMPTAB,
     IDC_LB_W,
     IDC_IMPSHEET, IDC_IMPCOL,
+    /* 找图新增:ID 从 140 起,避开 ctl 槽位 30/31(IDOK/IDCANCEL 保留) */
+    IDC_LB_TPL = 140, IDC_PICKTPL, IDC_TPLINFO, IDC_LB_MISSJUMP, IDC_MISSJUMP,
 };
 
 /* 行几何:标签右对齐列 + 控件列 */
@@ -42,11 +46,13 @@ enum {
 
 typedef struct {
     HWND  hwnd;
-    HWND  ctl[32];
+    HWND  ctl[48];
     int   done;
     int   ok;
     Step *step;
     int   isNew;
+    char *tplB64;             /* 找图:框选产生的模板(findimg_pack 结果) */
+    int   tplW, tplH;
 } EditDlg;
 
 static EditDlg g_edit;
@@ -171,6 +177,7 @@ static void layout_rows(int type)
             IDC_LB_XY2, IDC_X2, IDC_Y2, IDC_PICKXY2,
             IDC_LB_DELAY, IDC_DELAYB, IDC_DELAYA,
             IDC_LB_NOTE, IDC_NOTE,
+            IDC_LB_TPL, IDC_PICKTPL, IDC_TPLINFO, IDC_LB_MISSJUMP, IDC_MISSJUMP,
         };
         for (int i = 0; i < (int)(sizeof(allIds) / sizeof(allIds[0])); i++) {
             HWND h = g_edit.ctl[CTL_ID_OF(allIds[i])];
@@ -179,7 +186,7 @@ static void layout_rows(int type)
     }
     int isClick = (type == ACT_CLICK || type == ACT_DBLCLICK || type == ACT_MULTI ||
                    type == ACT_RCLICK || type == ACT_MCLICK || type == ACT_CHECK ||
-                   type == ACT_OCR);
+                   type == ACT_OCR || type == ACT_FINDIMG);
     int scroll  = (type == ACT_SCROLL);
     int drag    = (type == ACT_DRAG);
     int text    = (type == ACT_TEXT || type == ACT_KEY || type == ACT_WAITWIN ||
@@ -190,14 +197,15 @@ static void layout_rows(int type)
     if (isClick || scroll || drag) {
         set_ctl_text(IDC_LB_XY,
                      drag ? L"起点 X / Y" : scroll ? L"滚动位置" :
-                     type == ACT_OCR ? L"区域起点 X / Y" : L"坐标 X / Y");
+                     type == ACT_OCR ? L"区域起点 X / Y" :
+                     type == ACT_FINDIMG ? L"搜索区起点 X / Y" : L"坐标 X / Y");
         show_ctl(IDC_LB_XY, 1);
         show_ctl(IDC_X, 1);
         show_ctl(IDC_Y, 1);
         place(IDC_LB_XY, LB_X, y + 2, LB_W, 20);
         place(IDC_X, CT_X, y, 64, 22);
         place(IDC_Y, CT_X + 68, y, 64, 22);
-        if (isClick || drag) {
+        if ((isClick && type != ACT_FINDIMG) || drag) {
             show_ctl(IDC_PICKXY, 1);
             place(IDC_PICKXY, CT_X + 148, y - 2, 100, 26);
         } else {
@@ -279,20 +287,46 @@ static void layout_rows(int type)
         show_ctl(IDC_SCROLL, 0);
     }
 
-    /* 行:判断/识别区域宽高(0=单点/默认;拖框自动填) */
-    if (type == ACT_CHECK || type == ACT_OCR) {
+    /* 行:判断/识别/找图 区域宽高(0=单点/全屏;拖框自动填) */
+    if (type == ACT_CHECK || type == ACT_OCR || type == ACT_FINDIMG) {
         show_ctl(IDC_LB_W, 1);
         show_ctl(IDC_W, 1);
         show_ctl(IDC_H, 1);
         place(IDC_LB_W, LB_X, y + 2, LB_W, 20);
         place(IDC_W, CT_X, y, 56, 22);
         place(IDC_H, CT_X + 64, y, 56, 22);
-        set_ctl_text(IDC_LB_W, L"区域 W / H");
+        set_ctl_text(IDC_LB_W,
+                     type == ACT_FINDIMG ? L"搜索区 W/H(0=全屏)" : L"区域 W / H");
         y += ROW_H;
     } else {
         show_ctl(IDC_LB_W, 0);
         show_ctl(IDC_W, 0);
         show_ctl(IDC_H, 0);
+    }
+    /* 行:找图图像模板 */
+    if (type == ACT_FINDIMG) {
+        show_ctl(IDC_LB_TPL, 1);
+        show_ctl(IDC_PICKTPL, 1);
+        show_ctl(IDC_TPLINFO, 1);
+        place(IDC_LB_TPL, LB_X, y + 2, LB_W, 20);
+        place(IDC_PICKTPL, CT_X, y - 2, 108, 26);
+        place(IDC_TPLINFO, CT_X + 116, y + 2, 130, 20);
+        y += ROW_H;
+    } else {
+        show_ctl(IDC_LB_TPL, 0);
+        show_ctl(IDC_PICKTPL, 0);
+        show_ctl(IDC_TPLINFO, 0);
+    }
+    /* 行:找图 找到动作 + 容差(复用 次数=动作 间隔=容差) */
+    if (type == ACT_FINDIMG) {
+        set_ctl_text(IDC_LB_COUNT, L"动作/容差(0-255)");
+        show_ctl(IDC_LB_COUNT, 1);
+        show_ctl(IDC_COUNT, 1);
+        show_ctl(IDC_INTERVAL, 1);
+        place(IDC_LB_COUNT, LB_X, y + 2, LB_W, 20);
+        place(IDC_COUNT, CT_X, y, 56, 22);
+        place(IDC_INTERVAL, CT_X + 62, y, 56, 22);
+        y += ROW_H;
     }
     /* 行:判断颜色(仅判断;复用次数=颜色 间隔=容差) */
     if (type == ACT_CHECK) {
@@ -307,11 +341,13 @@ static void layout_rows(int type)
         y += ROW_H;
     }
     /* 行:跳转/调用/判断满足时目标 */
-    if (type == ACT_JUMP || type == ACT_CALL || type == ACT_CHECK || type == ACT_OCR) {
+    if (type == ACT_JUMP || type == ACT_CALL || type == ACT_CHECK ||
+        type == ACT_OCR || type == ACT_FINDIMG) {
         set_ctl_text(IDC_LB_JUMP,
                      type == ACT_CALL ? L"调用目标" :
                      type == ACT_CHECK ? L"满足则跳转" :
-                     type == ACT_OCR ? L"含关键词跳转" : L"跳转目标");
+                     type == ACT_OCR ? L"含关键词跳转" :
+                     type == ACT_FINDIMG ? L"找到则跳转" : L"跳转目标");
         show_ctl(IDC_LB_JUMP, 1);
         show_ctl(IDC_JUMP, 1);
         show_ctl(IDC_JUMPTAB, 1);
@@ -323,6 +359,18 @@ static void layout_rows(int type)
         show_ctl(IDC_LB_JUMP, 0);
         show_ctl(IDC_JUMP, 0);
         show_ctl(IDC_JUMPTAB, 0);
+    }
+
+    /* 行:找图 未找到跳转(0=继续;常用于"没找到→先去点开下拉") */
+    if (type == ACT_FINDIMG) {
+        show_ctl(IDC_LB_MISSJUMP, 1);
+        show_ctl(IDC_MISSJUMP, 1);
+        place(IDC_LB_MISSJUMP, LB_X, y + 2, LB_W, 20);
+        place(IDC_MISSJUMP, CT_X, y, 56, 22);
+        y += ROW_H;
+    } else {
+        show_ctl(IDC_LB_MISSJUMP, 0);
+        show_ctl(IDC_MISSJUMP, 0);
     }
 
     /* 行:拖动终点 */
@@ -418,6 +466,45 @@ static void do_pick(int which)
     }
 }
 
+/* 找图:全屏拖框截取模板图像(灰度打包) */
+static void do_pick_tpl(void)
+{
+    PickResult r;
+    ShowWindow(g_edit.hwnd, SW_HIDE);
+    Sleep(150);
+    int got = pick_screen_point(&r);
+    ShowWindow(g_edit.hwnd, SW_SHOW);
+    SetForegroundWindow(g_edit.hwnd);
+    if (!got) return;
+    if (r.w < 2 || r.h < 2) {
+        MessageBoxW(g_edit.hwnd, L"请在屏幕上拖动框选一块图像作为模板(单击无效)。",
+                    L"提示", MB_ICONINFORMATION);
+        return;
+    }
+    int ow = 0, oh = 0;
+    unsigned char *gray = win_grab_gray(r.x, r.y, r.w, r.h, &ow, &oh);
+    if (!gray) {
+        MessageBoxW(g_edit.hwnd, L"抓取屏幕图像失败。", L"提示", MB_ICONINFORMATION);
+        return;
+    }
+    char *packed = findimg_pack(get_int(IDC_W, 0), get_int(IDC_H, 0),
+                                get_int(IDC_MISSJUMP, 0), gray, ow, oh);
+    free(gray);
+    if (!packed) {
+        MessageBoxW(g_edit.hwnd, L"模板过大(上限约 128x128 像素),请框小一些。",
+                    L"提示", MB_ICONINFORMATION);
+        return;
+    }
+    free(g_edit.tplB64);
+    g_edit.tplB64 = packed;
+    g_edit.tplW = ow;
+    g_edit.tplH = oh;
+    wchar_t ti[40];
+    _snwprintf(ti, 39, L"已框选 %dx%d", ow, oh);
+    ti[39] = 0;
+    set_ctl_text(IDC_TPLINFO, ti);
+}
+
 /* 编辑窗打开期间,拖动屏幕标记实时更新坐标输入框 */
 int edit_dlg_live_coords(int seq, int x, int y)
 {
@@ -437,7 +524,8 @@ static int collect(void)
 
     s->x = get_int(IDC_X, 0);
     s->y = get_int(IDC_Y, 0);
-    s->count = (s->type == ACT_MULTI) ? get_int(IDC_COUNT, 1) : 0;
+    s->count = (s->type == ACT_MULTI || s->type == ACT_FINDIMG) ?
+               get_int(IDC_COUNT, 1) : 0;
     /* 单击/双击/右击/中击固定次数,忽略(隐藏的)次数框,避免默认值混入 */
     s->interval = get_int(IDC_INTERVAL, 100);
     s->x2 = get_int(IDC_X2, 0);
@@ -463,9 +551,25 @@ static int collect(void)
         long cv = wcstol(cb, &e, 16);
         s->ifColor = (int)cv;
         s->ifTol = get_int(IDC_INTERVAL, 10);
+    } else if (s->type == ACT_FINDIMG) {
+        s->w = get_int(IDC_W, 0);
+        s->h = get_int(IDC_H, 0);
+        if (s->w < 0) s->w = 0;
+        if (s->h < 0) s->h = 0;
+        s->ifColor = 0;
+        s->ifTol = get_int(IDC_INTERVAL, 20);
+        s->missJump = get_int(IDC_MISSJUMP, 0);
+        free(s->imgB64);
+        s->imgB64 = g_edit.tplB64 ? strdup(g_edit.tplB64) : NULL;
+        if (!s->imgB64) {
+            MessageBoxW(g_edit.hwnd, L"请先点「≡ 框选模板」截取要查找的图像。",
+                        L"提示", MB_ICONINFORMATION);
+            return 0;
+        }
     } else {
         s->ifColor = 0;
         s->ifTol = 0;
+        s->missJump = 0;
     }
     s->delayBefore = get_int(IDC_DELAYB, 0);
     s->delayAfter  = get_int(IDC_DELAYA, 200);
@@ -495,6 +599,7 @@ static void on_command(WPARAM wp)
 {
     int id = LOWORD(wp);
     switch (id) {
+    case IDC_PICKTPL: do_pick_tpl(); break;
     case IDC_PICKXY:  do_pick(0); break;
     case IDC_PICKXY2: do_pick(1); break;
     case IDC_BTN_IMPEXCEL: {
@@ -649,6 +754,13 @@ static void build_controls(void)
     CTL(L"EDIT", L"", WS_BORDER | ES_NUMBER, IDC_JUMP, 64, 22);
     CTL(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, IDC_JUMPTAB, 168, 160);
 
+    /* 找图:模板行 + 找不到跳转行 */
+    g_edit.ctl[IDC_LB_TPL - 100] = mk_ctl(L"STATIC", L"图像模板", SS_RIGHT, IDC_LB_TPL, LB_W, 20);
+    CTL(L"BUTTON", L"≡ 框选模板", BS_OWNERDRAW, IDC_PICKTPL, 108, 26);
+    g_edit.ctl[IDC_TPLINFO - 100] = mk_ctl(L"STATIC", L"未框选", 0, IDC_TPLINFO, 130, 20);
+    g_edit.ctl[IDC_LB_MISSJUMP - 100] = mk_ctl(L"STATIC", L"未找到跳转", SS_RIGHT, IDC_LB_MISSJUMP, LB_W, 20);
+    CTL(L"EDIT", L"", WS_BORDER | ES_NUMBER, IDC_MISSJUMP, 56, 22);
+
     /* 拖动终点行 */
     g_edit.ctl[IDC_LB_XY2 - 100] = mk_ctl(L"STATIC", L"终点 X / Y", SS_RIGHT, IDC_LB_XY2, LB_W, 20);
     CTL(L"EDIT", L"", WS_BORDER | ES_NUMBER, IDC_X2, 64, 22);
@@ -713,8 +825,9 @@ static const struct {
     { ACT_CHECK,    L"判断",   L"屏幕颜色判断分支" },
     { ACT_CALL,     L"调用",   L"执行另一TAB后返回" },
     { ACT_OCR,      L"读文本", L"区域识别文字并判断" },
+    { ACT_FINDIMG,  L"找图",   L"框选图像模板,找到后定位/点击" },
 };
-#define TP_COUNT 15
+#define TP_COUNT 16
 
 /* GDI 绘制类型小图标(36x36,QQ 蓝) */
 static void draw_type_icon(HDC dc, int x, int y, int type)
@@ -1143,6 +1256,9 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
     if (cx < 0) cx = 60;
     if (cy < 0) cy = 60;
 
+    free(g_edit.tplB64);
+    g_edit.tplB64 = NULL;
+    g_edit.tplW = g_edit.tplH = 0;
     g_edit.hwnd = CreateWindowExW(
         WS_EX_DLGMODALFRAME, EDIT_DLG_CLASS, title,
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
@@ -1169,6 +1285,26 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
         cb[15] = 0;
         set_ctl_text(IDC_COUNT, cb);
         set_int(IDC_INTERVAL, s->ifTol > 0 ? s->ifTol : 10);
+    }
+    if (s->type == ACT_FINDIMG) {
+        set_int(IDC_W, s->w);
+        set_int(IDC_H, s->h);
+        set_int(IDC_COUNT, s->count);
+        set_int(IDC_INTERVAL, s->ifTol > 0 ? s->ifTol : 20);
+        set_int(IDC_MISSJUMP, s->missJump);
+        if (s->imgB64 && s->imgB64[0]) {
+            int tw2 = 0, th2 = 0;
+            if (findimg_unpack(s->imgB64, NULL, NULL, NULL, NULL, &tw2, &th2)) {
+                free(g_edit.tplB64);
+                g_edit.tplB64 = strdup(s->imgB64);
+                g_edit.tplW = tw2;
+                g_edit.tplH = th2;
+                wchar_t ti[40];
+                _snwprintf(ti, 39, L"已框选 %dx%d", tw2, th2);
+                ti[39] = 0;
+                set_ctl_text(IDC_TPLINFO, ti);
+            }
+        }
     }
     {   /* 目标任务下拉:只列当前实际存在的TAB;默认选中当前任务 */
         HWND cb = g_edit.ctl[IDC_JUMPTAB - 100];
@@ -1231,6 +1367,8 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
         }
     }
 
+    free(g_edit.tplB64);
+    g_edit.tplB64 = NULL;
     g_uiDlgActive = 0;
     g_uiHotBtn = NULL;
     KillTimer(g_edit.hwnd, 5);

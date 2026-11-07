@@ -30,6 +30,7 @@ gcc $CFLAGS -o dist/baozhangka-tool \
     src/core/engine.c \
     src/core/ac_keys.c \
     src/core/import.c \
+    src/core/findimg.c \
     src/linux/platform_x11.c \
     src/linux/xui.c \
     src/linux/main.c \

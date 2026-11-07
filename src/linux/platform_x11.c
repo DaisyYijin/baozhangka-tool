@@ -238,6 +238,52 @@ static int x_find_window(const wchar_t *titleContains)
     return find_win_rec(d, RootWindow(d, DefaultScreen(d)), titleContains, &budget);
 }
 
+/* ---------------- 找图:屏幕灰度图 ---------------- */
+
+static int x_mask_shift(unsigned long m)
+{
+    int s = 0;
+    while (m && !(m & 1)) { m >>= 1; s++; }
+    return s;
+}
+
+/* 屏幕区域灰度图(0-255);w/h<=0 表示到屏幕右下;返回 malloc(w*h) */
+unsigned char *x_grab_gray(int x, int y, int w, int h, int *ow, int *oh)
+{
+    Display *d = xd();
+    if (!d) return NULL;
+    int scr = DefaultScreen(d);
+    Window root = RootWindow(d, scr);
+    int sw = DisplayWidth(d, scr), sh = DisplayHeight(d, scr);
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (w <= 0 || x + w > sw) w = sw - x;
+    if (h <= 0 || y + h > sh) h = sh - y;
+    if (w <= 0 || h <= 0) return NULL;
+    XImage *im = XGetImage(d, root, x, y, (unsigned)w, (unsigned)h,
+                           AllPlanes, ZPixmap);
+    if (!im) return NULL;
+    unsigned char *g = (unsigned char *)malloc((size_t)w * h);
+    if (g) {
+        int rs = x_mask_shift(im->red_mask);
+        int gs = x_mask_shift(im->green_mask);
+        int bs = x_mask_shift(im->blue_mask);
+        for (int yy = 0; yy < h; yy++) {
+            for (int xx = 0; xx < w; xx++) {
+                unsigned long p = XGetPixel(im, xx, yy);
+                int r = (int)((p >> rs) & 0xFF);
+                int gg = (int)((p >> gs) & 0xFF);
+                int b = (int)((p >> bs) & 0xFF);
+                g[(size_t)yy * w + xx] = (unsigned char)((r * 38 + gg * 75 + b * 13) >> 7);
+            }
+        }
+        if (ow) *ow = w;
+        if (oh) *oh = h;
+    }
+    XDestroyImage(im);
+    return g;
+}
+
 Platform *x11_platform(void)
 {
     static Platform p;
@@ -253,6 +299,7 @@ Platform *x11_platform(void)
         p.sleep_ms = x_sleep_ms;
         p.rand = x_rand;
         p.get_pixel = x_get_pixel;        /* 判断动作取色 */
+        p.grab_gray = x_grab_gray;        /* 找图:屏幕灰度图 */
         p.find_window = x_find_window;    /* 等窗口动作 */
         p.stop = &g_stop_flag;
         inited = 1;
