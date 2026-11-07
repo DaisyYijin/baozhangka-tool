@@ -2453,7 +2453,18 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         case IDC_BTN_SETTINGS:
             if (settings_dialog(hwnd)) {
-                /* 主题色/开关即时生效:整体重绘 */
+                /* 快捷键变更:重新注册热键 */
+                int newF = settings_dlg_float_hotkey();
+                int newS = settings_dlg_stop_hotkey();
+                if (newF != settings_float_hotkey() || newS != settings_stop_hotkey()) {
+                    /* 注销旧热键,注册新的 */
+                    UnregisterHotKey(hwnd, HOTK_START);
+                    UnregisterHotKey(hwnd, HOTK_STOP);
+                    settings_set_hotkeys(newF, newS);
+                    RegisterHotKey(hwnd, HOTK_STOP, MOD_CONTROL, settings_stop_hotkey());
+                    RegisterHotKey(hwnd, HOTK_START, 0, settings_float_hotkey());
+                }
+                /* 主题色/开关即时生效 */
                 settings_apply_ui();
             }
             return 0;

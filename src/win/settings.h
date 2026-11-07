@@ -24,6 +24,15 @@ int settings_show_float_btn(void);
 int settings_show_quick_pick(void);
 void settings_set_quick(int showFloatBtn, int showQuickPick);
 
+/* 悬浮窗快捷键(可配置,默认 F6/Ctrl+F12) */
+int settings_float_hotkey(void);       /* 返回 VK_xx */
+int settings_stop_hotkey(void);        /* 返回 VK_xx(修饰固定 Ctrl) */
+void settings_set_hotkeys(int floatVk, int stopVk);
+
+/* 设置对话框结束后取所选快捷键(dlg_settings.c 内部) */
+int settings_dlg_float_hotkey(void);
+int settings_dlg_stop_hotkey(void);
+
 /* ---- 预留扩展:后续设置项在此追加接口 ---- */
 
 #ifdef __cplusplus

@@ -1,5 +1,5 @@
 /* ============================================================
- * dlg_settings.c - 设置对话框(主题色/快捷按钮/预留扩展)
+ * dlg_settings.c - 设置对话框(主题色/快捷按钮/悬浮窗快捷键/预留扩展)
  * 模态小循环,风格参照 dlg_edit 的 sched_dialog
  * ============================================================ */
 #define WIN32_LEAN_AND_MEAN
@@ -13,26 +13,39 @@
 
 static const wchar_t SET_DLG_CLASS[] = L"AcSettingsDlg";
 #define SET_W 380
-#define SET_H 320
+#define SET_H 360
 
 #define SID_OK      1
 #define SID_CANCEL  2
-#define SID_CUSTOM_R 100
-#define SID_CUSTOM_G 101
-#define SID_CUSTOM_B 102
-#define SID_APPLY_THEME 103
-#define SID_CHK_FLOAT 104
-#define SID_CHK_PICK  105
-#define SID_SWATCH0   110   /* 预设色块 110..117 */
+#define SID_CHK_FLOAT  104
+#define SID_CHK_PICK    105
+#define SID_SWATCH0     110   /* 预设色块 110..117 */
+#define SID_HK_FLOAT    120   /* 悬浮窗快捷键下拉 */
+#define SID_HK_STOP     121   /* 停止快捷键下拉 */
+
+/* 快捷键选项(下拉):悬浮窗开始键 */
+static const struct { int vk; const wchar_t *label; } HK_OPTIONS[] = {
+    { VK_F5,     L"F5" },
+    { VK_F6,     L"F6(默认)" },
+    { VK_F7,     L"F7" },
+    { VK_F8,     L"F8" },
+    { VK_F9,     L"F9" },
+    { VK_F10,    L"F10" },
+    { VK_F11,    L"F11" },
+    { VK_PAUSE,  L"Pause" },
+    { VK_SCROLL, L"ScrollLock" },
+};
+#define HK_OPT_N ((int)(sizeof(HK_OPTIONS) / sizeof(HK_OPTIONS[0])))
 
 static struct {
     HWND hwnd, ok, cancel;
-    HWND cR, cG, cB, applyT;
     HWND chkFloat, chkPick;
     HWND swatch[8];
+    HWND hkFloat, hkStop;
     int done, result;
     COLORREF theme;
     int showFloat, showPick;
+    int hkFloatVk, hkStopVk;    /* 选择的快捷键 VK 码 */
 } g_st;
 
 static void paint_swatch(HWND h, COLORREF c, int sel)
@@ -45,6 +58,7 @@ static void paint_swatch(HWND h, COLORREF c, int sel)
     FillRect(dc, &rc, br);
     FrameRect(dc, &rc, frame);
     if (sel) {
+        /* 选中标记:白色对角线 */
         HPEN p = CreatePen(PS_SOLID, 2, RGB(255,255,255));
         HGDIOBJ op = SelectObject(dc, p);
         MoveToEx(dc, rc.left+4, rc.top+4, NULL); LineTo(dc, rc.right-4, rc.bottom-4);
@@ -63,21 +77,6 @@ static void refresh_swatches(void)
     const COLORREF *ps = settings_theme_presets(&n);
     for (int i = 0; i < n && i < 8; i++)
         paint_swatch(g_st.swatch[i], ps[i], ps[i] == g_st.theme);
-}
-
-static void sync_custom_edits(void)
-{
-    wchar_t b[8];
-    _snwprintf(b, 7, L"%d", (g_st.theme >> 16) & 0xFF); SetWindowTextW(g_st.cR, b);
-    _snwprintf(b, 7, L"%d", (g_st.theme >> 8) & 0xFF);  SetWindowTextW(g_st.cG, b);
-    _snwprintf(b, 7, L"%d", g_st.theme & 0xFF);         SetWindowTextW(g_st.cB, b);
-}
-
-static int get_int_h(HWND h)
-{
-    wchar_t b[16];
-    GetWindowTextW(h, b, 15);
-    return _wtoi(b);
 }
 
 static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -99,11 +98,12 @@ static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         SetTextColor(dc, RGB(0x2E,0x2E,0x2E));
         TextOutW(dc, 16, 12, L"\x4E3B\x9898\x8272", 3);            /* 主题色 */
         TextOutW(dc, 16, 118, L"\x5FEB\x6377\x6309\x94AE", 4);     /* 快捷按钮 */
-        TextOutW(dc, 16, 196, L"\x66F4\x591A\x8BBE\x7F6E\xFF08\x9884\x7559\xFF09", 8); /* 更多设置(预留) */
+        TextOutW(dc, 16, 168, L"\x60AC\x6D6E\x7A97\x5FEB\x6377\x952E", 6); /* 悬浮窗快捷键 */
+        TextOutW(dc, 16, 236, L"\x66F4\x591A\x8BBE\x7F6E\xFF08\x9884\x7559\xFF09", 8); /* 更多设置(预留) */
         SelectObject(dc, of);
         HGDIOBJ of2 = SelectObject(dc, g_uiFont);
         SetTextColor(dc, RGB(0x8A,0x8A,0x8A));
-        TextOutW(dc, 16, 214,
+        TextOutW(dc, 16, 254,
                  L"\x540E\x7EED\x7248\x672C\x5C06\x5728\x6B64\x589E\x52A0\x66F4\x591A\x914D\x7F6E\x9879", 15); /* 后续版本将在此增加更多配置项 */
         SelectObject(dc, of2);
         EndPaint(hwnd, &ps);
@@ -114,7 +114,7 @@ static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         SetTextColor((HDC)wp, RGB(0x3A,0x3A,0x3A));
         return (LRESULT)GetStockObject(WHITE_BRUSH);
     case WM_LBUTTONUP: {
-        /* 预设色块命中(子窗口区域外框判断用窗口矩形) */
+        /* 预设色块命中 → 即时换色 */
         POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
         for (int i = 0; i < 8; i++) {
             RECT rc;
@@ -125,8 +125,8 @@ static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 int n = 0;
                 const COLORREF *ps = settings_theme_presets(&n);
                 g_st.theme = ps[i];
+                settings_set_theme_color(g_st.theme);   /* 即时保存+生效 */
                 refresh_swatches();
-                sync_custom_edits();
                 break;
             }
         }
@@ -135,25 +135,18 @@ static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_COMMAND: {
         int id = LOWORD(wp);
         if (id == SID_OK) {
-            /* 自定义 RGB 优先(与预设不同时即自定义) */
-            g_st.theme = RGB(get_int_h(g_st.cR) & 0xFF,
-                             get_int_h(g_st.cG) & 0xFF,
-                             get_int_h(g_st.cB) & 0xFF);
             g_st.showFloat = (SendMessageW(g_st.chkFloat, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_st.showPick  = (SendMessageW(g_st.chkPick,  BM_GETCHECK, 0, 0) == BST_CHECKED);
+            /* 快捷键下拉选择 */
+            int sf = (int)SendMessageW(g_st.hkFloat, CB_GETCURSEL, 0, 0);
+            int ss = (int)SendMessageW(g_st.hkStop,  CB_GETCURSEL, 0, 0);
+            if (sf >= 0 && sf < HK_OPT_N) g_st.hkFloatVk = HK_OPTIONS[sf].vk;
+            if (ss >= 0 && ss < HK_OPT_N) g_st.hkStopVk  = HK_OPTIONS[ss].vk;
             g_st.result = 1;
             g_st.done = 1;
         } else if (id == SID_CANCEL) {
             g_st.result = 0;
             g_st.done = 1;
-        } else if (id == SID_APPLY_THEME) {
-            g_st.theme = RGB(get_int_h(g_st.cR) & 0xFF,
-                             get_int_h(g_st.cG) & 0xFF,
-                             get_int_h(g_st.cB) & 0xFF);
-            settings_set_theme_color(g_st.theme);
-            refresh_swatches();
-            MessageBoxW(hwnd, L"\x4E3B\x9898\x8272\x5DF2\x5E94\x7528\xFF0C\x754C\x9762\x5C06\x7ACB\x5373\x5237\x65B0\x3002",  /* 主题色已应用 */
-                        L"\x63D0\x793A", MB_ICONINFORMATION);  /* 提示 */
         }
         return 0;
     }
@@ -171,6 +164,8 @@ int settings_dialog(HWND owner)
     g_st.theme = ThemeColor();
     g_st.showFloat = settings_show_float_btn();
     g_st.showPick = settings_show_quick_pick();
+    g_st.hkFloatVk = settings_float_hotkey();
+    g_st.hkStopVk  = settings_stop_hotkey();
 
     WNDCLASSW wc;
     memset(&wc, 0, sizeof(wc));
@@ -195,36 +190,16 @@ int settings_dialog(HWND owner)
         owner, NULL, wc.hInstance, NULL);
     if (!g_st.hwnd) return 0;
 
-    /* --- 主题色:预设色块两行 --- */
+    /* --- 主题色:预设色板(点选即换,无 RGB 输入) --- */
     int n = 0;
     const COLORREF *ps = settings_theme_presets(&n);
     for (int i = 0; i < n && i < 8; i++) {
         int col = i % 4, row = i / 4;
         g_st.swatch[i] = CreateWindowExW(0, L"STATIC", L"",
             WS_CHILD | WS_VISIBLE | SS_NOTIFY,
-            20 + col * 44, 36 + row * 38, 34, 30,
+            20 + col * 60, 36 + row * 38, 48, 30,
             g_st.hwnd, (HMENU)(INT_PTR)(SID_SWATCH0 + i), wc.hInstance, NULL);
     }
-    /* 自定义 RGB */
-    CreateWindowExW(0, L"STATIC", L"R",
-        WS_CHILD | WS_VISIBLE, 210, 40, 14, 20, g_st.hwnd, NULL, wc.hInstance, NULL);
-    g_st.cR = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
-        WS_CHILD | WS_VISIBLE | ES_NUMBER, 228, 37, 40, 22,
-        g_st.hwnd, (HMENU)SID_CUSTOM_R, wc.hInstance, NULL);
-    CreateWindowExW(0, L"STATIC", L"G",
-        WS_CHILD | WS_VISIBLE, 210, 68, 14, 20, g_st.hwnd, NULL, wc.hInstance, NULL);
-    g_st.cG = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
-        WS_CHILD | WS_VISIBLE | ES_NUMBER, 228, 65, 40, 22,
-        g_st.hwnd, (HMENU)SID_CUSTOM_G, wc.hInstance, NULL);
-    CreateWindowExW(0, L"STATIC", L"B",
-        WS_CHILD | WS_VISIBLE, 210, 96, 14, 20, g_st.hwnd, NULL, wc.hInstance, NULL);
-    g_st.cB = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
-        WS_CHILD | WS_VISIBLE | ES_NUMBER, 228, 93, 40, 22,
-        g_st.hwnd, (HMENU)SID_CUSTOM_B, wc.hInstance, NULL);
-    g_st.applyT = CreateWindowExW(0, L"BUTTON",
-        L"\x5E94\x7528",                        /* 应用 */
-        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        282, 64, 60, 26, g_st.hwnd, (HMENU)SID_APPLY_THEME, wc.hInstance, NULL);
 
     /* --- 快捷按钮开关 --- */
     g_st.chkFloat = CreateWindowExW(0, L"BUTTON",
@@ -238,6 +213,34 @@ int settings_dialog(HWND owner)
     SendMessageW(g_st.chkFloat, BM_SETCHECK, g_st.showFloat ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(g_st.chkPick,  BM_SETCHECK, g_st.showPick  ? BST_CHECKED : BST_UNCHECKED, 0);
 
+    /* --- 悬浮窗快捷键设置 --- */
+    CreateWindowExW(0, L"STATIC",
+        L"\x5F00\x59CB\x952E:",  /* 开始键: */
+        WS_CHILD | WS_VISIBLE, 20, 190, 60, 20, g_st.hwnd, NULL, wc.hInstance, NULL);
+    g_st.hkFloat = CreateWindowExW(0, L"COMBOBOX", L"",
+        CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE | WS_VSCROLL,
+        88, 187, 100, 200, g_st.hwnd, (HMENU)SID_HK_FLOAT, wc.hInstance, NULL);
+    CreateWindowExW(0, L"STATIC",
+        L"\x505C\x6B62\x952E:",  /* 停止键: */
+        WS_CHILD | WS_VISIBLE, 200, 190, 60, 20, g_st.hwnd, NULL, wc.hInstance, NULL);
+    g_st.hkStop = CreateWindowExW(0, L"COMBOBOX", L"",
+        CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE | WS_VSCROLL,
+        268, 187, 90, 200, g_st.hwnd, (HMENU)SID_HK_STOP, wc.hInstance, NULL);
+    /* 填充选项并选中当前值 */
+    for (int i = 0; i < HK_OPT_N; i++) {
+        SendMessageW(g_st.hkFloat, CB_ADDSTRING, 0, (LPARAM)HK_OPTIONS[i].label);
+        SendMessageW(g_st.hkStop,  CB_ADDSTRING, 0, (LPARAM)HK_OPTIONS[i].label);
+        if (HK_OPTIONS[i].vk == g_st.hkFloatVk)
+            SendMessageW(g_st.hkFloat, CB_SETCURSEL, i, 0);
+        if (HK_OPTIONS[i].vk == g_st.hkStopVk)
+            SendMessageW(g_st.hkStop, CB_SETCURSEL, i, 0);
+    }
+    /* 无匹配项时默认 F6 */
+    if (SendMessageW(g_st.hkFloat, CB_GETCURSEL, 0, 0) == CB_ERR)
+        SendMessageW(g_st.hkFloat, CB_SETCURSEL, 1, 0);   /* F6 */
+    if (SendMessageW(g_st.hkStop, CB_GETCURSEL, 0, 0) == CB_ERR)
+        SendMessageW(g_st.hkStop, CB_SETCURSEL, 1, 0);
+
     /* --- 底部按钮 --- */
     g_st.ok = CreateWindowExW(0, L"BUTTON",
         L"\x786E\x5B9A",                        /* 确定 */
@@ -249,13 +252,12 @@ int settings_dialog(HWND owner)
         SET_W - 100, SET_H - 62, 80, 30, g_st.hwnd, (HMENU)SID_CANCEL, wc.hInstance, NULL);
 
     if (g_uiFont) {
-        HWND kids[] = { g_st.cR, g_st.cG, g_st.cB, g_st.applyT,
-                        g_st.chkFloat, g_st.chkPick, g_st.ok, g_st.cancel, NULL };
+        HWND kids[] = { g_st.chkFloat, g_st.chkPick, g_st.hkFloat, g_st.hkStop,
+                        g_st.ok, g_st.cancel, NULL };
         for (int i = 0; kids[i]; i++)
             SendMessageW(kids[i], WM_SETFONT, (WPARAM)g_uiFont, TRUE);
     }
 
-    sync_custom_edits();
     refresh_swatches();
 
     ShowWindow(g_st.hwnd, SW_SHOW);
@@ -287,3 +289,7 @@ int settings_dialog(HWND owner)
     SetForegroundWindow(owner);
     return g_st.result;
 }
+
+/* 对话框结束后取所选值(gui.c 使用) */
+int settings_dlg_float_hotkey(void) { return g_st.hkFloatVk; }
+int settings_dlg_stop_hotkey(void)  { return g_st.hkStopVk; }
