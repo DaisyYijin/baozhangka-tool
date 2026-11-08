@@ -926,26 +926,69 @@ static void on_toggle_dis(XuiWgt *btn, void *data)
     refresh_list();
 }
 
-/* 数据提取:按表B(列结构模板)的表头,从表A提取同名列,导出 CSV */
-static void on_extract(XuiWgt *btn, void *data)
-{
-    (void)btn; (void)data;
-    char *pa = xui_filesel(g_ui, g_win, 0,
-        "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96 - \xe9\x80\x89\xe8\xa1\xa8A(\xe6\x95\xb0\xe6\x8d\xae\xe6\x9d\xa5\xe6\xba\x90)",  /* 数据提取 - 选表A(数据来源) */
-        "xlsx,csv,txt", NULL);
-    if (!pa) return;
-    char *pb = xui_filesel(g_ui, g_win, 0,
-        "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96 - \xe9\x80\x89\xe8\xa1\xa8B(\xe5\x88\x97\xe7\xbb\x93\xe6\x9e\x84\xe6\xa8\xa1\xe6\x9d\xbf)",  /* 数据提取 - 选表B(列结构模板) */
-        "xlsx,csv,txt", NULL);
-    if (!pb) { free(pa); return; }
+/* 数据提取(独立窗口:拖拽/点击选表A与表B) */
+static struct {
+    XuiWin *dlg;
+    XuiWgt *lbA, *lbB;                 /* 槽:当前文件名/提示 */
+    char pathA[1024], pathB[1024];
+} g_ex;
 
+/* XDND 拖入 → 按当前指针 y 判定表A/表B 槽 */
+static void ex_on_dnd(XuiWin *w, const char *path, void *ud)
+{
+    (void)w; (void)ud;
+    const char *dot = strrchr(path, '.');
+    if (!dot || (strcasecmp(dot, ".xlsx") && strcasecmp(dot, ".csv") &&
+                 strcasecmp(dot, ".txt"))) {
+        show_info("\xe4\xbb\x85\xe6\x94\xaf\xe6\x8c\x81 .xlsx / .csv / .txt \xe6\x96\x87\xe4\xbb\xb6");  /* 仅支持 .xlsx/.csv/.txt 文件 */
+        return;
+    }
+    Window rr, cr; int rx, ry, wx, wy; unsigned mask;
+    XQueryPointer(g_ui->dpy, g_ex.dlg->win, &rr, &cr, &rx, &ry, &wx, &wy, &mask);
+    if (wy < 130) {                    /* 上半=表A,下半=表B */
+        snprintf(g_ex.pathA, sizeof(g_ex.pathA), "%s", path);
+        xui_set_text(g_ex.lbA, strrchr(path, '/') ? strrchr(path, '/') + 1 : path);
+    } else {
+        snprintf(g_ex.pathB, sizeof(g_ex.pathB), "%s", path);
+        xui_set_text(g_ex.lbB, strrchr(path, '/') ? strrchr(path, '/') + 1 : path);
+    }
+}
+
+/* 点击槽位 = 文件选择(保留原有方式) */
+static void ex_pick(XuiWgt *btn, void *ud)
+{
+    (void)btn;
+    int which = (int)(intptr_t)ud;
+    char *p = xui_filesel(g_ui, g_ex.dlg, 0,
+        which == 0 ? "\xe9\x80\x89\xe6\x8b\xa9\xe8\xa1\xa8A(\xe6\x95\xb0\xe6\x8d\xae\xe6\x9d\xa5\xe6\xba\x90)"   /* 选择表A(数据来源) */
+                   : "\xe9\x80\x89\xe6\x8b\xa9\xe8\xa1\xa8B(\xe5\x88\x97\xe7\xbb\x93\xe6\x9e\x84\xe6\xa8\xa1\xe6\x9d\xbf)",  /* 选择表B(列结构模板) */
+        "xlsx,csv,txt", NULL);
+    if (!p) return;
+    if (which == 0) {
+        snprintf(g_ex.pathA, sizeof(g_ex.pathA), "%s", p);
+        xui_set_text(g_ex.lbA, strrchr(p, '/') ? strrchr(p, '/') + 1 : p);
+    } else {
+        snprintf(g_ex.pathB, sizeof(g_ex.pathB), "%s", p);
+        xui_set_text(g_ex.lbB, strrchr(p, '/') ? strrchr(p, '/') + 1 : p);
+    }
+    free(p);
+}
+
+/* 开始提取:解析+提取+保存 */
+static void ex_go(XuiWgt *btn, void *ud)
+{
+    (void)btn; (void)ud;
+    if (!g_ex.pathA[0] || !g_ex.pathB[0]) {
+        show_info("\xe8\xaf\xb7\xe5\x85\x88\xe6\x8c\x87\xe5\xae\x9a\xe8\xa1\xa8A\xe4\xb8\x8e\xe8\xa1\xa8B:\xe6\x8b\x96\xe5\x85\xa5\xe6\x96\x87\xe4\xbb\xb6\xe6\x88\x96\xe7\x82\xb9\xe6\xa7\xbd\xe4\xbd\x8d\xe9\x80\x89\xe6\x8b\xa9");  /* 请先指定表A与表B */
+        return;
+    }
     Sheet a, b, out;
     memset(&a, 0, sizeof(a));
     memset(&b, 0, sizeof(b));
     memset(&out, 0, sizeof(out));
     size_t la = 0, lb = 0;
-    unsigned char *da = read_file_all_from_utf8(pa, &la);
-    unsigned char *db = read_file_all_from_utf8(pb, &lb);
+    unsigned char *da = read_file_all_from_utf8(g_ex.pathA, &la);
+    unsigned char *db = read_file_all_from_utf8(g_ex.pathB, &lb);
     int ok = 0;
     if (da && db) {
         int ra = (la >= 4 && da[0] == 'P' && da[1] == 'K')
@@ -959,13 +1002,11 @@ static void on_extract(XuiWgt *btn, void *data)
     free(da); free(db);
     if (!ok) {
         sheet_free(&a); sheet_free(&b);
-        free(pa); free(pb);
         show_info("\xe6\x97\xa0\xe6\xb3\x95\xe8\xa7\xa3\xe6\x9e\x90\xe8\xa1\xa8\xe6\xa0\xbc\xe6\x96\x87\xe4\xbb\xb6");  /* 无法解析表格文件 */
         return;
     }
     sheet_extract(&a, &b, &out);
-
-    char *po = xui_filesel(g_ui, g_win, 1,
+    char *po = xui_filesel(g_ui, g_ex.dlg, 1,
         "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96 - \xe4\xbf\x9d\xe5\xad\x98\xe7\xbb\x93\xe6\x9e\x9c",  /* 数据提取 - 保存结果 */
         "csv", NULL);
     if (po) {
@@ -974,7 +1015,7 @@ static void on_extract(XuiWgt *btn, void *data)
         if (sheet_save_csv(&out, wpo) == 0) {
             char m[300];
             snprintf(m, sizeof(m),
-                     "\xe6\x8f\x90\xe5\x8f\x96\xe5\xae\x8c\xe6\x88\x90:%d \xe5\x88\x97 \xc3\x97 %d \xe8\xa1\x8c(\xe5\x90\xab\xe8\xa1\xa8\xe5\xa4\xb4) \xe2\x86\x92 %s",  /* 提取完成:N 列 × M 行(含表头) → 路径 */
+                     "\xe6\x8f\x90\xe5\x8f\x96\xe5\xae\x8c\xe6\x88\x90:%d \xe5\x88\x97 \xc3\x97 %d \xe8\xa1\x8c(\xe5\x90\xab\xe8\xa1\xa8\xe5\xa4\xb4) \xe2\x86\x92 %s",
                      out.cols, out.rows, po);
             set_status("%s", m);
         } else {
@@ -983,7 +1024,44 @@ static void on_extract(XuiWgt *btn, void *data)
         free(po);
     }
     sheet_free(&a); sheet_free(&b); sheet_free(&out);
-    free(pa); free(pb);
+}
+
+static void on_extract(XuiWgt *btn, void *ud)
+{
+    (void)btn; (void)ud;
+    memset(&g_ex, 0, sizeof(g_ex));
+    g_ex.dlg = xui_window_new(g_ui, 420, 300,
+                              "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96");  /* 数据提取 */
+    XuiWin *dlg = g_ex.dlg;
+    xui_window_dnd(dlg, ex_on_dnd, NULL);   /* XDND 文件拖入 */
+
+    /* 表A 槽(上半):标题+文件名行+提示+点击选择 */
+    xui_label(dlg, 20, 12, 200, 20,
+              "\xe8\xa1\xa8A(\xe6\x95\xb0\xe6\x8d\xae\xe6\x9d\xa5\xe6\xba\x90):");   /* 表A(数据来源): */
+    g_ex.lbA = xui_label(dlg, 30, 36, 360, 20,
+                         "\xe6\x8b\x96\xe5\x85\xa5\xe6\x96\x87\xe4\xbb\xb6\xe5\x88\xb0\xe6\xad\xa4\xe5\xa4\x84");  /* 拖入文件到此处 */
+    xui_label(dlg, 30, 58, 360, 18,
+              "\xe6\x94\xaf\xe6\x8c\x81 xlsx / csv / txt");                         /* 支持 xlsx/csv/txt */
+    xui_button(dlg, 300, 82, 92, 24,
+               "\xe7\x82\xb9\xe5\x87\xbb\xe9\x80\x89\xe6\x8b\xa9", ex_pick, (void *)(intptr_t)0);  /* 点击选择 */
+
+    /* 表B 槽(下半) */
+    xui_label(dlg, 20, 140, 240, 20,
+              "\xe8\xa1\xa8B(\xe5\x88\x97\xe7\xbb\x93\xe6\x9e\x84\xe6\xa8\xa1\xe6\x9d\xbf):");   /* 表B(列结构模板): */
+    g_ex.lbB = xui_label(dlg, 30, 164, 360, 20,
+                         "\xe6\x8b\x96\xe5\x85\xa5\xe6\x96\x87\xe4\xbb\xb6\xe5\x88\xb0\xe6\xad\xa4\xe5\xa4\x84");
+    xui_label(dlg, 30, 186, 360, 18,
+              "\xe6\x94\xaf\xe6\x8c\x81 xlsx / csv / txt");
+    xui_button(dlg, 300, 210, 92, 24,
+               "\xe7\x82\xb9\xe5\x87\xbb\xe9\x80\x89\xe6\x8b\xa9", ex_pick, (void *)(intptr_t)1);
+
+    XuiWgt *bGo = xui_button(dlg, 200, 252, 96, 28,
+                             "\xe5\xbc\x80\xe5\xa7\x8b\xe6\x8f\x90\xe5\x8f\x96", ex_go, NULL);   /* 开始提取 */
+    XuiWgt *bClose = xui_button(dlg, 310, 252, 70, 28,
+                                "\xe5\x85\xb3\xe9\x97\xad", NULL, NULL);                        /* 关闭 */
+    xui_window_set_default(dlg, bGo, bClose);
+    xui_window_run(dlg);
+    g_ex.dlg = NULL;
 }
 
 /* ===================== 设置对话框(与 Windows 设置中心对齐) ===================== */

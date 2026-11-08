@@ -20,6 +20,7 @@ typedef struct XuiWgt XuiWgt;
 /* 回调 */
 typedef void (*XuiFn)(XuiWgt *w, void *ud);              /* 点击/勾选 */
 typedef void (*XuiListFn)(XuiWgt *w, int row, void *ud); /* 列表选择/双击 */
+typedef void (*XuiDndFn)(XuiWin *w, const char *utf8Path, void *ud); /* XDND 文件拖入 */
 typedef void (*XuiKeyFn)(XuiWin *win, KeySym ks, unsigned state, void *ud);
 typedef void (*XuiHotFn)(XUi *ui, KeySym ks, unsigned state, void *ud);
 typedef int  (*XuiCloseFn)(XuiWin *win, void *ud);       /* 返回1=允许关闭 */
@@ -44,6 +45,7 @@ void    xui_window_stay_top(XuiWin *w);              /* 置顶(EWMH _NET_WM_STAT
 void    xui_window_move(XuiWin *w, int x, int y);    /* 移动到屏幕坐标 */
 void    xui_window_pos(XuiWin *w, int *x, int *y);   /* 取屏幕坐标 */
 void    xui_window_hide(XuiWin *w);                  /* 隐藏(Unmap) */
+void    xui_window_dnd(XuiWin *w, XuiDndFn cb, void *ud);  /* 启用 XDND 文件拖入接收 */
 
 /* ---- 控件(父窗口内绝对布局,坐标含边框) ---- */
 XuiWgt *xui_label (XuiWin *p, int x,int y,int w,int h, const char *utf8);

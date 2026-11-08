@@ -76,6 +76,7 @@ struct XuiWin {
     XuiWgt *defBtn, *cancelBtn;
     int running, modalResult;
     int shown, mapped;
+    XuiDndFn dndFn; void *dndUd;        /* XDND 拖入回调 */
 };
 
 struct XUi {
@@ -87,6 +88,10 @@ struct XUi {
     unsigned long cFace, cWhite, cGray, cDark, cBlack, cSel, cSelText, cDis, cBar;
     unsigned long cTheme;                 /* 主题色(与 cSel 联动) */
     Atom aDelWin, aUtf8, aClip, aPrim, aTargets, aIncr, aText, aCompound, aTextPlain;
+    /* XDND 拖放接收 */
+    Atom aXdndAware, aXdndEnter, aXdndPos, aXdndDrop, aXdndFin, aXdndStatus;
+    Atom aXdndSel, aXdndCopy, aXdndUri, aDndProp;
+    Window dndSrc; XuiWin *dndWin;
     XIM im;
     int fdWake[2];
     XuiWin *wins[XUI_MAX_WINS]; int nWins;
@@ -1121,6 +1126,34 @@ static void dispatch(XUi *ui, XEvent *ev)
                    ev->xclient.message_type == ui->aPrim) {
             if (ev->xclient.type == SelectionRequest)   /* 恒真,类型即结构 */
                 clip_on_request(ui, &ev->xselectionrequest);
+        } else if (ev->xclient.message_type == ui->aXdndEnter) {
+            XuiWin *w = find_win(ui, ev->xclient.window);
+            if (w && w->dndFn) ui->dndWin = w;
+        } else if (ev->xclient.message_type == ui->aXdndPos) {
+            if (ui->dndWin) {            /* 回 XdndStatus:整窗接受 Copy */
+                Window src = (Window)ev->xclient.data.l[0];
+                ui->dndSrc = src;
+                XClientMessageEvent m;
+                memset(&m, 0, sizeof(m));
+                m.type = ClientMessage;
+                m.display = ui->dpy;
+                m.window = src;
+                m.message_type = ui->aXdndStatus;
+                m.format = 32;
+                m.data.l[0] = (long)ui->dndWin->win;
+                m.data.l[1] = 1;         /* 接受 */
+                m.data.l[2] = 0;
+                m.data.l[3] = 0;
+                m.data.l[4] = (long)ui->aXdndCopy;
+                XSendEvent(ui->dpy, src, False, 0, (XEvent *)&m);
+            }
+        } else if (ev->xclient.message_type == ui->aXdndDrop) {
+            if (ui->dndWin) {            /* 请求数据:uri-list → 回调在 SelectionNotify */
+                ui->dndSrc = (Window)ev->xclient.data.l[0];
+                Time tm = (Time)ev->xclient.data.l[1];
+                XConvertSelection(ui->dpy, ui->aXdndSel, ui->aXdndUri,
+                                  ui->aDndProp, ui->dndWin->win, tm);
+            }
         }
         break;
     }
@@ -1128,7 +1161,10 @@ static void dispatch(XUi *ui, XEvent *ev)
         free(ui->clipText); ui->clipText = NULL;
         break;
     case SelectionNotify:
-        ui->clipDone = 1;
+        if (ev->xselection.property == ui->aDndProp)
+            dnd_on_notify(ui, &ev->xselection);   /* XDND 数据 */
+        else
+            ui->clipDone = 1;                     /* 剪贴板 */
         break;
     case MappingNotify:
         XRefreshKeyboardMapping(&ev->xmapping);
@@ -1288,6 +1324,75 @@ void xui_window_pos(XuiWin *w, int *x, int *y)
 void xui_window_hide(XuiWin *w)
 {
     XUnmapWindow(w->ui->dpy, w->win);
+}
+
+/* ===================== XDND 拖放接收(协议 v5 简化实现) ===================== */
+
+/* "file:///a%20b" → "/a b"(原地百分号解码) */
+static char *dnd_uri_decode(char *s)
+{
+    if (strncmp(s, "file://", 7) == 0) s += 7;
+    char *out = s, *p = s;
+    while (*p) {
+        if (p[0] == '%' && p[1] && p[2]) {
+            int hi = (p[1] <= '9') ? p[1] - '0' : (p[1] | 0x20) - 'a' + 10;
+            int lo = (p[2] <= '9') ? p[2] - '0' : (p[2] | 0x20) - 'a' + 10;
+            *out++ = (char)((hi << 4) | lo);
+            p += 3;
+        } else {
+            *out++ = *p++;
+        }
+    }
+    *out = 0;
+    return s;
+}
+
+/* XDND 数据到达(SelectionNotify,property=XUI_DND_DATA):取 uri→回调→回 Finished */
+static void dnd_on_notify(XUi *ui, XSelectionEvent *se)
+{
+    XuiWin *w = ui->dndWin;
+    Window src = ui->dndSrc;
+    ui->dndWin = NULL;
+    Atom type = None;
+    int fmt = 0;
+    unsigned long n = 0, left = 0;
+    unsigned char *data = NULL;
+    if (XGetWindowProperty(ui->dpy, se->requestor, ui->aDndProp, 0, 1L << 18,
+                           True, ui->aXdndUri, &type, &fmt, &n, &left,
+                           &data) == Success && data) {
+        char *line = (char *)data;
+        char *brk = strpbrk(line, "\r\n");
+        if (brk) *brk = 0;
+        char path[4096];
+        snprintf(path, sizeof(path), "%s", line);
+        XFree(data);
+        dnd_uri_decode(path);
+        if (path[0] && w && w->dndFn)
+            w->dndFn(w, path, w->dndUd);
+    }
+    /* 回 XdndFinished 给拖动源 */
+    XClientMessageEvent m;
+    memset(&m, 0, sizeof(m));
+    m.type = ClientMessage;
+    m.display = ui->dpy;
+    m.window = src;
+    m.message_type = ui->aXdndFin;
+    m.format = 32;
+    m.data.l[0] = (long)se->requestor;
+    m.data.l[1] = 1;                     /* 成功 */
+    m.data.l[2] = (long)ui->aXdndCopy;
+    XSendEvent(ui->dpy, src, False, 0, (XEvent *)&m);
+    XFlush(ui->dpy);
+}
+
+void xui_window_dnd(XuiWin *w, XuiDndFn cb, void *ud)
+{
+    if (!w) return;
+    w->dndFn = cb;
+    w->dndUd = ud;
+    Atom ver = 5;                        /* XDND 协议版本 5 */
+    XChangeProperty(w->ui->dpy, w->win, w->ui->aXdndAware, XA_ATOM, 32,
+                    PropModeReplace, (unsigned char *)&ver, 1);
 }
 
 /* ==================== 消息框 ==================== */
@@ -1564,6 +1669,16 @@ XUi *xui_open(void)
     ui->aIncr     = XInternAtom(ui->dpy, "INCR", False);
     ui->aText     = XInternAtom(ui->dpy, "TEXT", False);
     ui->aCompound = XInternAtom(ui->dpy, "COMPOUND_TEXT", False);
+    ui->aXdndAware  = XInternAtom(ui->dpy, "XdndAware", False);
+    ui->aXdndEnter  = XInternAtom(ui->dpy, "XdndEnter", False);
+    ui->aXdndPos    = XInternAtom(ui->dpy, "XdndPosition", False);
+    ui->aXdndDrop   = XInternAtom(ui->dpy, "XdndDrop", False);
+    ui->aXdndFin    = XInternAtom(ui->dpy, "XdndFinished", False);
+    ui->aXdndStatus = XInternAtom(ui->dpy, "XdndStatus", False);
+    ui->aXdndSel    = XInternAtom(ui->dpy, "XdndSelection", False);
+    ui->aXdndCopy   = XInternAtom(ui->dpy, "XdndActionCopy", False);
+    ui->aXdndUri    = XInternAtom(ui->dpy, "text/uri-list", False);
+    ui->aDndProp    = XInternAtom(ui->dpy, "XUI_DND_DATA", False);
     ui->aTextPlain= XInternAtom(ui->dpy, "text/plain;charset=utf-8", False);
     ui->im = XOpenIM(ui->dpy, NULL, NULL, NULL);
     if (pipe(ui->fdWake) == 0) {
