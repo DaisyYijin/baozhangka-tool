@@ -228,15 +228,6 @@ static const wchar_t *const TYPE_HELP[ACT_TYPE_COUNT_] = {
     L"提示:分支只影响本行走哪段流程,本轮结束后自动处理下一行。",
 };
 
-/* 说明文字行数(按换行符计数) */
-static int help_lines(const wchar_t *s)
-{
-    int n = 1;
-    for (const wchar_t *p = s; *p; p++)
-        if (*p == L'\n') n++;
-    return n;
-}
-
 static void layout_rows(int type)
 {
     /* 先隐藏全部可选控件,再按类型显示,杜绝残留控件叠在当前布局上 */
@@ -494,15 +485,32 @@ static void layout_rows(int type)
     place(IDC_NOTE, CT_X + 142, y, 106, 22);
     y += ROW_H;
 
-    /* 行:按类型的通俗填写说明(灰字多行,高度自适应) */
+    /* 行:按类型的通俗填写说明(灰字多行,高度按实测自适应,长行折行算入) */
     {
         const wchar_t *ht = (type >= 0 && type < ACT_TYPE_COUNT_) ?
                             TYPE_HELP[type] : L"";
         set_ctl_text(IDC_TYPEHELP, ht);
         show_ctl(IDC_TYPEHELP, 1);
-        int hl = help_lines(ht);
-        place(IDC_TYPEHELP, LB_X, y, DLG_CW - LB_X - 8, hl * 15 + 4);
-        y += hl * 15 + 10;
+        int hw = DLG_CW - LB_X - 8;
+        int hh;
+        if (ht[0]) {
+            /* DrawTextW CALCRECT 按实际宽度量真实高度(自动折行计入),杜绝估算截断 */
+            HDC hdc = GetDC(g_edit.hwnd);
+            HGDIOBJ ofOld = SelectObject(hdc, g_uiFont);
+            RECT hrc = { 0, 0, hw - 4, 0 };
+            DrawTextW(hdc, ht, -1, &hrc, DT_CALCRECT | DT_WORDBREAK);
+            SelectObject(hdc, ofOld);
+            ReleaseDC(g_edit.hwnd, hdc);
+            hh = (hrc.bottom - hrc.top) + 10;
+        } else {
+            hh = 0;
+        }
+        int maxHelp = GetSystemMetrics(SM_CYSCREEN) * 2 / 5;  /* 小屏保险上限 */
+        if (hh > maxHelp) hh = maxHelp;
+        if (hh > 0) {
+            place(IDC_TYPEHELP, LB_X, y, hw, hh);
+            y += hh + 8;
+        }
     }
 
     /* 底部按钮 */
