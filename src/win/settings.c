@@ -15,6 +15,7 @@ static int g_pauseHotkey = VK_F7;  /* 暂停/继续快捷键 */
 static int g_pauseMod    = 0;
 static int g_stopHotkey  = VK_F12; /* 停止快捷键 */
 static int g_stopMod     = MOD_CONTROL;   /* 停止默认 Ctrl+ */
+static int g_fltX = -1, g_fltY = -1;     /* 悬浮窗上次位置 */
 
 static wchar_t g_iniPath[MAX_PATH];
 
@@ -53,6 +54,8 @@ void settings_load(void)
     g_pauseMod      = GetPrivateProfileIntW(L"hotkey", L"pauseMod", 0, g_iniPath);
     g_stopHotkey    = GetPrivateProfileIntW(L"hotkey", L"stopVk", VK_F12, g_iniPath);
     g_stopMod       = GetPrivateProfileIntW(L"hotkey", L"stopMod", MOD_CONTROL, g_iniPath);
+    g_fltX          = GetPrivateProfileIntW(L"float", L"x", -1, g_iniPath);
+    g_fltY          = GetPrivateProfileIntW(L"float", L"y", -1, g_iniPath);
 }
 
 void settings_save(void)
@@ -74,6 +77,12 @@ void settings_save(void)
     WritePrivateProfileStringW(L"hotkey", L"stopVk", buf, g_iniPath);
     swprintf(buf, 32, L"%d", g_stopMod);
     WritePrivateProfileStringW(L"hotkey", L"stopMod", buf, g_iniPath);
+    if (g_fltX >= 0 && g_fltY >= 0) {   /* 悬浮窗位置(仅保存过才写) */
+        swprintf(buf, 32, L"%d", g_fltX);
+        WritePrivateProfileStringW(L"float", L"x", buf, g_iniPath);
+        swprintf(buf, 32, L"%d", g_fltY);
+        WritePrivateProfileStringW(L"float", L"y", buf, g_iniPath);
+    }
 }
 
 COLORREF ThemeColor(void) { return g_themeColor; }
@@ -83,6 +92,9 @@ void settings_set_theme_color(COLORREF c)
     g_themeColor = c;
     settings_save();
 }
+
+void settings_get_float_pos(int *x, int *y) { *x = g_fltX; *y = g_fltY; }
+void settings_set_float_pos(int x, int y)   { g_fltX = x; g_fltY = y; settings_save(); }
 
 const COLORREF *settings_theme_presets(int *n)
 {

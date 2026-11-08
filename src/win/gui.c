@@ -573,6 +573,33 @@ void mark_clear_preview(void)
 static HWND g_hFloat = NULL;
 static wchar_t g_floatText[96] = L"空闲";
 
+/* VK 码→显示名(与设置对话框 HK_OPTIONS 一致) */
+static const wchar_t *vk_name(int vk)
+{
+    switch (vk) {
+    case VK_F5: return L"F5";   case VK_F6:  return L"F6";
+    case VK_F7: return L"F7";   case VK_F8:  return L"F8";
+    case VK_F9: return L"F9";   case VK_F10: return L"F10";
+    case VK_F11: return L"F11"; case VK_F12: return L"F12";
+    case VK_PAUSE: return L"Pause";
+    case VK_SCROLL: return L"ScrollLock";
+    case VK_INSERT: return L"Insert";
+    case VK_HOME: return L"Home";
+    }
+    return L"?";
+}
+
+/* 组合键显示文本:"F6"/"Ctrl+F12"/"Alt+Shift+P" 等(跟随设置) */
+static void hk_text(wchar_t *buf, int cbch, int mod, int vk)
+{
+    buf[0] = 0;
+    if (mod & MOD_CONTROL) wcscat(buf, L"Ctrl+");
+    if (mod & MOD_ALT)     wcscat(buf, L"Alt+");
+    if (mod & MOD_SHIFT)   wcscat(buf, L"Shift+");
+    wcscat(buf, vk_name(vk));
+    (void)cbch;
+}
+
 static void start_run(void);
 static void stop_run(void);
 static void toggle_pause(void);
@@ -583,7 +610,17 @@ static void float_toggle(void);
    (定义在此:g_hMain 与 g_hFloat 均已可见) */
 static void settings_apply_ui(void)
 {
-    /* 快捷按钮已按需求移除;仅主题色重绘 */
+    /* 主按钮文字跟随最新热键设置(悬浮窗为动态绘制,重绘即新) */
+    wchar_t tb[32], bt[48];
+    if (g_running) {
+        hk_text(tb, 32, settings_stop_mod(), settings_stop_hotkey());
+        swprintf(bt, 48, L"停止 %ls", tb);
+    } else {
+        hk_text(tb, 32, settings_float_mod(), settings_float_hotkey());
+        swprintf(bt, 48, L"开始 %ls", tb);
+    }
+    SetWindowTextW(g_hBtn[14], bt);
+    InvalidateRect(g_hBtn[14], NULL, TRUE);
     InvalidateRect(g_hMain, NULL, TRUE);
     if (g_hFloat && IsWindowVisible(g_hFloat)) InvalidateRect(g_hFloat, NULL, FALSE);
 }
@@ -699,11 +736,18 @@ static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             SelectObject(mem, of);
         }
 
-        /* 第二行:开始/暂停/继续/停止(圆角按钮,主界面字体,按状态置灰) */
+        /* 第二行:开始/暂停/继续/停止(圆角按钮,主界面字体,按状态置灰;快捷键文字跟随设置) */
         {
-            static const wchar_t *btnTxt[4] = {
-                L"开始 F6", L"暂停 F7", L"继续 F7", L"停止 ^F12"
-            };
+            wchar_t t0[32], t1[32], t2[32], t3[32], lbl[4][56];
+            hk_text(t0, 32, settings_float_mod(), settings_float_hotkey());
+            hk_text(t1, 32, settings_pause_mod(), settings_pause_hotkey());
+            hk_text(t2, 32, settings_pause_mod(), settings_pause_hotkey());
+            hk_text(t3, 32, settings_stop_mod(),  settings_stop_hotkey());
+            swprintf(lbl[0], 56, L"开始 %ls", t0);
+            swprintf(lbl[1], 56, L"暂停 %ls", t1);
+            swprintf(lbl[2], 56, L"继续 %ls", t2);
+            swprintf(lbl[3], 56, L"停止 %ls", t3);
+            const wchar_t *btnTxt[4] = { lbl[0], lbl[1], lbl[2], lbl[3] };
             HGDIOBJ ofb = SelectObject(mem, g_uiFont);
             for (int i = 0; i < 4; i++) {
                 RECT rb; flt_btn_rect(i, &rb);
@@ -773,12 +817,19 @@ static void float_register(void)
 static void float_create(void)
 {
     if (g_hFloat) return;
+    /* 位置:优先用上次关闭时记住的位置;越界(换分辨率)或未保存则回退右下角 */
+    int fx = -1, fy = -1;
+    settings_get_float_pos(&fx, &fy);
+    int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+    if (fx < 0 || fy < 0 || fx > sw - 60 || fy > sh - 40) {
+        fx = sw - FLT_W - 24;
+        fy = sh - FLT_H - 60;
+    }
     g_hFloat = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
         L"AcFloatWnd", L"",
         WS_POPUP,
-        GetSystemMetrics(SM_CXSCREEN) - FLT_W - 24,
-        GetSystemMetrics(SM_CYSCREEN) - FLT_H - 60,
+        fx, fy,
         FLT_W, FLT_H,
         NULL, NULL, GetModuleHandleW(NULL), NULL);
 }
@@ -796,8 +847,12 @@ static void float_update(const wchar_t *text)
 static void float_toggle(void)
 {
     if (!g_hFloat) return;
-    if (IsWindowVisible(g_hFloat)) ShowWindow(g_hFloat, SW_HIDE);
-    else {
+    if (IsWindowVisible(g_hFloat)) {
+        RECT frc;   /* 隐藏前记住位置 */
+        GetWindowRect(g_hFloat, &frc);
+        settings_set_float_pos(frc.left, frc.top);
+        ShowWindow(g_hFloat, SW_HIDE);
+    } else {
         ShowWindow(g_hFloat, SW_SHOWNOACTIVATE);
         InvalidateRect(g_hFloat, NULL, FALSE);
     }
@@ -1026,7 +1081,12 @@ static void start_run(void)
     for (int i = 0; i < MAX_TASKS; i++)            /* 运行中锁定TAB行 */
         if (g_hTabs[i]) EnableWindow(g_hTabs[i], FALSE);
     if (g_hTabAdd) EnableWindow(g_hTabAdd, FALSE);
-    SetWindowTextW(g_hBtn[14], L"停止 Ctrl+F12");
+    {
+        wchar_t tb[32], bt[48];
+        hk_text(tb, 32, settings_stop_mod(), settings_stop_hotkey());
+        swprintf(bt, 48, L"停止 %ls", tb);
+        SetWindowTextW(g_hBtn[14], bt);
+    }
     InvalidateRect(g_hBtn[14], NULL, TRUE);
     float_update(L"运行中…");
 
@@ -1045,11 +1105,19 @@ static void toggle_pause(void)
     int on = !engine_paused();
     engine_pause(on);
     if (on) {
-        log_add(L"已暂停 —— F7 继续 / Ctrl+F12 停止");
-        set_status(L"已暂停 —— F7 继续 / Ctrl+F12 停止");
+        wchar_t p[32], s[32], m[128];
+        hk_text(p, 32, settings_pause_mod(), settings_pause_hotkey());
+        hk_text(s, 32, settings_stop_mod(), settings_stop_hotkey());
+        swprintf(m, 128, L"已暂停 —— %ls 继续 / %ls 停止", p, s);
+        log_add(m);
+        set_status(m);
     } else {
+        wchar_t p[32], s[32], m[128];
+        hk_text(p, 32, settings_pause_mod(), settings_pause_hotkey());
+        hk_text(s, 32, settings_stop_mod(), settings_stop_hotkey());
+        swprintf(m, 128, L"运行中 —— 暂停:%ls / 停止:%ls", p, s);
         log_add(L"已继续执行");
-        set_status(L"运行中 —— 暂停:F7 / 停止:Ctrl+F12");
+        set_status(m);
     }
     if (g_hFloat) InvalidateRect(g_hFloat, NULL, FALSE);
 }
@@ -1079,7 +1147,12 @@ static void run_finished(WPARAM r)
     for (int i = 0; i < MAX_TASKS; i++)            /* 解除TAB行锁定 */
         if (g_hTabs[i]) EnableWindow(g_hTabs[i], TRUE);
     if (g_hTabAdd) EnableWindow(g_hTabAdd, TRUE);
-    SetWindowTextW(g_hBtn[14], L"开始 F6");
+    {
+        wchar_t tb[32], bt[48];
+        hk_text(tb, 32, settings_float_mod(), settings_float_hotkey());
+        swprintf(bt, 48, L"开始 %ls", tb);
+        SetWindowTextW(g_hBtn[14], bt);
+    }
     InvalidateRect(g_hBtn[14], NULL, TRUE);
     float_update(r == ENGINE_STOP ? L"空闲 · 已停止" : L"空闲 · 已完成");
     g_curMark = -1;                     /* 清除执行高亮 */
@@ -2611,6 +2684,11 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
 
     case WM_DESTROY:
+        if (g_hFloat) {   /* 退出前记住悬浮窗位置 */
+            RECT frc;
+            GetWindowRect(g_hFloat, &frc);
+            settings_set_float_pos(frc.left, frc.top);
+        }
         for (int i = 0; i < MAX_TASKS; i++) task_free(&g_taskbook.tasks[i]);
         UnregisterHotKey(hwnd, HOTK_STOP);
         UnregisterHotKey(hwnd, HOTK_START);

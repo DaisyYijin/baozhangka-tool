@@ -38,6 +38,10 @@ int settings_dlg_pause_mod(void);
 int settings_dlg_stop_hotkey(void);
 int settings_dlg_stop_mod(void);
 
+/* 悬浮窗位置记忆(未保存过返回 -1) */
+void settings_get_float_pos(int *x, int *y);
+void settings_set_float_pos(int x, int y);
+
 /* ---- 预留扩展:后续设置项在此追加接口 ---- */
 
 #ifdef __cplusplus
