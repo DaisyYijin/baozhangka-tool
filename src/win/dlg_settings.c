@@ -364,7 +364,8 @@ int settings_dialog(HWND owner)
         }
     }
 
-    ShowWindow(g_st.hwnd, SW_SHOW);
+    if (!AnimateWindow(g_st.hwnd, 150, AW_BLEND))     /* 淡入(XP+;系统关动画时回退) */
+        ShowWindow(g_st.hwnd, SW_SHOW);
     UpdateWindow(g_st.hwnd);
     EnableWindow(owner, FALSE);
     g_uiDlgActive = 1;

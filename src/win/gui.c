@@ -520,7 +520,8 @@ static HWND mark_create(int x, int y, const wchar_t *txt, int seq)
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)seq);
     if (g_running) { ShowWindow(hwnd, SW_HIDE); return hwnd; }   /* 执行中不显示 */
     SetLayeredWindowAttributes(hwnd, MARK_COLORKEY, 0, LWA_COLORKEY);
-    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    if (!AnimateWindow(hwnd, 150, AW_BLEND))         /* 淡入且不抢焦点(XP+) */
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     return hwnd;
 }
 
@@ -2459,7 +2460,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_GETMINMAXINFO: {
         MINMAXINFO *mmi = (MINMAXINFO *)lp;
         mmi->ptMinTrackSize.x = 950;   /* 保证侧栏+设置行(悬浮窗按钮右缘910)完整 */
-        mmi->ptMinTrackSize.y = 640;
+        mmi->ptMinTrackSize.y = 540;   /* 1024x600 上网本可用(客户区列表仍剩约370px) */
         return 0;
     }
 

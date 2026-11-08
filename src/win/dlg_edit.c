@@ -1599,7 +1599,8 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
         SetWindowPos(g_edit.hwnd, NULL, nx, ny, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
     }
 
-    ShowWindow(g_edit.hwnd, SW_SHOW);
+    if (!AnimateWindow(g_edit.hwnd, 150, AW_BLEND))   /* 淡入(XP+;系统关动画时回退) */
+        ShowWindow(g_edit.hwnd, SW_SHOW);
     UpdateWindow(g_edit.hwnd);
     EnableWindow(owner, FALSE);
     g_uiDlgActive = 1;

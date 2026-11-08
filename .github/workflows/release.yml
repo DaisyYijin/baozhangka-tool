@@ -48,6 +48,22 @@ jobs:
               fail=1
             fi
           done
+          echo "=== ASan 轮(地址消毒,只检内存错误;容器内 LSan 权限不可靠故关泄漏检测) ==="
+          for t in tests/test_*.c; do
+            name=$(basename "$t" .c)
+            if [ "$name" = "test_theme" ]; then continue; fi
+            if gcc -std=gnu99 -O1 -g -fsanitize=address -Isrc/core "$t" \
+                src/core/u8.c src/core/inflate.c src/core/zip.c src/core/sheet.c \
+                src/core/engine.c src/core/ac_keys.c src/core/import.c src/core/findimg.c \
+                -o "/tmp/$name.asan" 2> "/tmp/$name.asan.err" \
+               && ASAN_OPTIONS=detect_leaks=0 "/tmp/$name.asan" > "/tmp/$name.asan.out" 2>&1; then
+              echo "ASAN PASS $name"
+            else
+              echo "ASAN FAIL $name"
+              tail -25 "/tmp/$name.asan.err" "/tmp/$name.asan.out" 2>/dev/null || true
+              fail=1
+            fi
+          done
           exit $fail
       - name: Xvfb smoke test (GUI 启动存活)
         run: |
