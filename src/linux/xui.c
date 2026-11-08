@@ -559,6 +559,20 @@ void xui_combo_add(XuiWgt *c, const char *utf8)
     c->nItems++;
 }
 int  xui_combo_active(XuiWgt *c) { return c->active; }
+void xui_combo_clear(XuiWgt *c)
+{
+    if (!c) return;
+    for (int i = 0; i < c->nItems; i++) free(c->items[i]);
+    free(c->items);
+    c->items = NULL;
+    c->nItems = 0;
+    c->active = -1;
+    wgt_text_set(c, "");
+}
+const char *xui_combo_text(XuiWgt *c)
+{
+    return (c && c->text) ? c->text : "";
+}
 void xui_combo_set_active(XuiWgt *c, int idx)
 {
     if (idx < 0 || idx >= c->nItems) return;

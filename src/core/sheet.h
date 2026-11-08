@@ -33,6 +33,11 @@ int xls_parse(const unsigned char *data, size_t len,
 /* 自动判型:OLE2 头(D0 CF 11 E0)→xls,PK 头→xlsx(首表),否则 CSV */
 int sheet_parse_auto(const unsigned char *data, size_t len,
                      char *(*gbk)(const char *, size_t), Sheet *out);
+/* 多条件筛选(筛选提取用):cols[i]/vals[i] 为第 i 个条件;
+   列名或值为空则跳过该条;多条件 AND(同时满足);值为包含式匹配(strstr)。
+   命中数据行(连同表头)复制到 out;返回命中数据行数,-1=条件列名在表头中不存在 */
+int sheet_filter_rows_multi(const Sheet *src, const char *const *cols,
+                            const char *const *vals, int n, Sheet *out);
 
 /* 解析 .xlsx(zipped OOXML)。成功返回 0,使用第一个工作表。 */
 int xlsx_parse(const uint8_t *data, size_t size, Sheet *out);

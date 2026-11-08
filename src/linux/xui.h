@@ -58,6 +58,8 @@ XuiWgt *xui_combo (XuiWin *p, int x,int y,int w,int h, XuiFn onPick, void *ud);
 XuiWgt *xui_statusbar(XuiWin *p, int x,int y,int w,int h);
 
 void xui_combo_add(XuiWgt *c, const char *utf8);
+void xui_combo_clear(XuiWgt *c);         /* 清空全部选项 */
+const char *xui_combo_text(XuiWgt *c);   /* 当前选中项文本(UTF-8) */
 int  xui_combo_active(XuiWgt *c);
 void xui_combo_set_active(XuiWgt *c, int idx);
 

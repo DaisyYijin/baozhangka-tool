@@ -1062,6 +1062,255 @@ static void on_extract(XuiWgt *btn, void *ud)
     g_ex.dlg = NULL;
 }
 
+/* ===================== 筛选提取(多条件筛选表A → 按表B表头输出) ===================== */
+
+static struct {
+    XuiWin *dlg;
+    XuiWgt *lbA, *lbB;
+    XuiWgt *colCmb[3], *valCmb[3];
+    char pathA[1024], pathB[1024];
+    Sheet shA, shB;
+} g_flt;
+
+static void flt_fill_cols(void)
+{
+    for (int i = 0; i < 3; i++) {
+        xui_combo_clear(g_flt.colCmb[i]);
+        xui_combo_clear(g_flt.valCmb[i]);
+        xui_combo_add(g_flt.colCmb[i], "(\xe4\xb8\x8d\xe7\xad\x9b)");   /* (不筛) */
+        xui_combo_set_active(g_flt.colCmb[i], 0);
+    }
+    if (g_flt.shA.rows >= 1 && g_flt.shA.cells && g_flt.shA.cells[0])
+        for (int c = 0; c < g_flt.shA.cols; c++) {
+            if (!g_flt.shA.cells[0][c]) continue;
+            for (int i = 0; i < 3; i++)
+                xui_combo_add(g_flt.colCmb[i], g_flt.shA.cells[0][c]);
+        }
+}
+
+static void flt_load_a(const char *path)
+{
+    snprintf(g_flt.pathA, sizeof(g_flt.pathA), "%s", path);
+    sheet_free(&g_flt.shA);
+    memset(&g_flt.shA, 0, sizeof(g_flt.shA));
+    size_t len = 0;
+    unsigned char *d = read_file_all_from_utf8(path, &len);
+    if (d) { sheet_parse_auto(d, len, NULL, &g_flt.shA); free(d); }
+    flt_fill_cols();
+}
+
+static void flt_load_b(const char *path)
+{
+    snprintf(g_flt.pathB, sizeof(g_flt.pathB), "%s", path);
+    sheet_free(&g_flt.shB);
+    memset(&g_flt.shB, 0, sizeof(g_flt.shB));
+    size_t len = 0;
+    unsigned char *d = read_file_all_from_utf8(path, &len);
+    if (d) { sheet_parse_auto(d, len, NULL, &g_flt.shB); free(d); }
+}
+
+/* 列选择变化 → 填该列去重值(前 500) */
+static void flt_on_col(XuiWgt *btn, void *ud)
+{
+    (void)btn;
+    int i = (int)(intptr_t)ud;
+    xui_combo_clear(g_flt.valCmb[i]);
+    const char *col = xui_combo_text(g_flt.colCmb[i]);
+    if (!col[0] || strcmp(col, "(\xe4\xb8\x8d\xe7\xad\x9b)") == 0) return;  /* (不筛) */
+    int kc = -1;
+    if (g_flt.shA.cells && g_flt.shA.cells[0])
+        for (int c = 0; c < g_flt.shA.cols; c++)
+            if (g_flt.shA.cells[0][c] && strcmp(g_flt.shA.cells[0][c], col) == 0) { kc = c; break; }
+    if (kc < 0) return;
+    const char *seen[500];
+    int nSeen = 0;
+    for (int r = 1; r < g_flt.shA.rows && nSeen < 500; r++) {
+        const char *v = (g_flt.shA.cells[r] && g_flt.shA.cells[r][kc])
+                       ? g_flt.shA.cells[r][kc] : "";
+        if (!v[0]) continue;
+        int dup = 0;
+        for (int k = 0; k < nSeen; k++)
+            if (strcmp(seen[k], v) == 0) { dup = 1; break; }
+        if (dup) continue;
+        seen[nSeen++] = v;
+        xui_combo_add(g_flt.valCmb[i], v);
+    }
+}
+
+/* XDND 拖入:按指针 y 分槽(上半表A/下半表B) */
+static void flt_on_dnd(XuiWin *w, const char *path, void *ud)
+{
+    (void)w; (void)ud;
+    const char *dot = strrchr(path, '.');
+    if (!dot || (strcasecmp(dot, ".xlsx") && strcasecmp(dot, ".xls") &&
+                 strcasecmp(dot, ".csv") && strcasecmp(dot, ".txt"))) {
+        show_info("\xe4\xbb\x85\xe6\x94\xaf\xe6\x8c\x81 .xlsx / .xls / .csv / .txt \xe6\x96\x87\xe4\xbb\xb6");
+        return;
+    }
+    int wx = 0, wy = 0;
+    xui_pointer_pos(g_flt.dlg, &wx, &wy);
+    const char *base = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
+    if (wy < 123) {
+        flt_load_a(path);
+        xui_set_text(g_flt.lbA, base);
+        set_status("\xe5\xb7\xb2\xe9\x80\x89\xe8\xa1\xa8A: %s", path);       /* 已选表A: */
+    } else {
+        flt_load_b(path);
+        xui_set_text(g_flt.lbB, base);
+        set_status("\xe5\xb7\xb2\xe9\x80\x89\xe8\xa1\xa8B: %s", path);       /* 已选表B: */
+    }
+}
+
+/* 点击选择(保留原有方式) */
+static void flt_pick(XuiWgt *btn, void *ud)
+{
+    (void)btn;
+    int which = (int)(intptr_t)ud;
+    char *p = xui_filesel(g_ui, g_flt.dlg, 0,
+        which == 0 ? "\xe9\x80\x89\xe6\x8b\xa9\xe8\xa1\xa8A(\xe6\x95\xb0\xe6\x8d\xae\xe6\x9d\xa5\xe6\xba\x90)"   /* 选择表A */
+                   : "\xe9\x80\x89\xe6\x8b\xa9\xe8\xa1\xa8B(\xe5\x88\x97\xe7\xbb\x93\xe6\x9e\x84\xe6\xa8\xa1\xe6\x9d\xbf)",  /* 选择表B */
+        "xlsx,xls,csv,txt", NULL);
+    if (!p) return;
+    const char *base = strrchr(p, '/') ? strrchr(p, '/') + 1 : p;
+    if (which == 0) { flt_load_a(p); xui_set_text(g_flt.lbA, base); }
+    else            { flt_load_b(p); xui_set_text(g_flt.lbB, base); }
+    free(p);
+}
+
+/* 筛选(预览/提取共用);命中数,-2=未选表A,-1=列不存在 */
+static int flt_filter(Sheet *o)
+{
+    if (g_flt.shA.rows < 1) return -2;
+    const char *cs[3], *vs[3];
+    static char dummy[1] = "";
+    for (int i = 0; i < 3; i++) {
+        cs[i] = xui_combo_text(g_flt.colCmb[i]);
+        vs[i] = xui_combo_text(g_flt.valCmb[i]);
+        if (strcmp(cs[i], "(\xe4\xb8\x8d\xe7\xad\x9b)") == 0) cs[i] = dummy;  /* (不筛)=空 */
+        if (!cs[i][0]) vs[i] = dummy;
+    }
+    return sheet_filter_rows_multi(&g_flt.shA, cs, vs, 3, o);
+}
+
+static void flt_preview(XuiWgt *btn, void *ud)
+{
+    (void)btn; (void)ud;
+    Sheet o;
+    memset(&o, 0, sizeof(o));
+    int n = flt_filter(&o);
+    if (n == -2) {
+        show_info("\xe8\xaf\xb7\xe5\x85\x88\xe9\x80\x89\xe6\x8b\xa9\xe8\xa1\xa8A\xe3\x80\x82");  /* 请先选择表A。 */
+        return;
+    }
+    if (n == -1) {
+        show_info("\xe7\xad\x9b\xe9\x80\x89\xe5\x88\x97\xe4\xb8\x8d\xe5\xad\x98\xe5\x9c\xa8,\xe8\xaf\xb7\xe6\xa3\x80\xe6\x9f\xa5\xe6\x9d\xa1\xe4\xbb\xb6\xe5\x88\x97\xe5\x90\x8d\xe3\x80\x82");
+        return;
+    }
+    char txt[2048];
+    int off = snprintf(txt, sizeof(txt),
+                       "\xe5\x91\xbd\xe4\xb8\xad %d \xe8\xa1\x8c / \xe5\x85\xb1 %d \xe8\xa1\x8c\n",  /* 命中 N 行 / 共 M 行 */
+                       n, g_flt.shA.rows - 1);
+    for (int r = 1; r < o.rows && r <= 5 && off > 0 && off < 1900; r++) {
+        for (int c = 0; c < o.cols && c < 5; c++)
+            off += snprintf(txt + off, sizeof(txt) - off, "%s%s",
+                            c ? " | " : "",
+                            (o.cells[r] && o.cells[r][c]) ? o.cells[r][c] : "");
+        off += snprintf(txt + off, sizeof(txt) - off, "\n");
+    }
+    show_info(txt);
+    sheet_free(&o);
+}
+
+static void flt_go(XuiWgt *btn, void *ud)
+{
+    (void)btn; (void)ud;
+    if (!g_flt.pathA[0] || !g_flt.pathB[0]) {
+        show_info("\xe8\xaf\xb7\xe5\x85\x88\xe9\x80\x89\xe6\x8b\xa9\xe8\xa1\xa8A\xe4\xb8\x8e\xe8\xa1\xa8B\xe3\x80\x82");  /* 请先选择表A与表B。 */
+        return;
+    }
+    Sheet fo;
+    memset(&fo, 0, sizeof(fo));
+    int n = flt_filter(&fo);
+    if (n == -2 || n == -1) {
+        show_info(n == -2 ? "\xe8\xaf\xb7\xe5\x85\x88\xe9\x80\x89\xe6\x8b\xa9\xe8\xa1\xa8A\xe3\x80\x82"
+                          : "\xe7\xad\x9b\xe9\x80\x89\xe5\x88\x97\xe4\xb8\x8d\xe5\xad\x98\xe5\x9c\xa8\xe3\x80\x82");
+        sheet_free(&fo);
+        return;
+    }
+    Sheet out;
+    memset(&out, 0, sizeof(out));
+    sheet_extract(&fo, &g_flt.shB, &out);
+    char *po = xui_filesel(g_ui, g_flt.dlg, 1,
+        "\xe7\xad\x9b\xe9\x80\x89\xe6\x8f\x90\xe5\x8f\x96 - \xe4\xbf\x9d\xe5\xad\x98\xe7\xbb\x93\xe6\x9e\x9c",  /* 筛选提取 - 保存结果 */
+        "csv", NULL);
+    if (po) {
+        wchar_t wpo[1024];
+        u8_to_wcs(po, wpo, 1023);
+        if (sheet_save_csv(&out, wpo) == 0) {
+            char m[300];
+            snprintf(m, sizeof(m),
+                     "\xe7\xad\x9b\xe9\x80\x89\xe6\x8f\x90\xe5\x8f\x96\xe5\xae\x8c\xe6\x88\x90:%d \xe8\xa1\x8c \xc3\x97 %d \xe5\x88\x97 \xe2\x86\x92 %s",  /* 筛选提取完成:N 行 × M 列 → 路径 */
+                     out.rows > 0 ? out.rows - 1 : 0, out.cols, po);
+            set_status("%s", m);
+        } else {
+            show_info("\xe4\xbf\x9d\xe5\xad\x98\xe6\x96\x87\xe4\xbb\xb6\xe5\xa4\xb1\xe8\xb4\xa5\xe3\x80\x82");
+        }
+        free(po);
+    }
+    sheet_free(&fo);
+    sheet_free(&out);
+}
+
+static void on_filter(XuiWgt *btn, void *ud)
+{
+    (void)btn; (void)ud;
+    memset(&g_flt, 0, sizeof(g_flt));
+    g_flt.dlg = xui_window_new(g_ui, 460, 560,
+                               "\xe7\xad\x9b\xe9\x80\x89\xe6\x8f\x90\xe5\x8f\x96");  /* 筛选提取 */
+    XuiWin *dlg = g_flt.dlg;
+    xui_window_dnd(dlg, flt_on_dnd, NULL);
+
+    /* 表A 槽(上半) */
+    xui_label(dlg, 20, 12, 260, 20,
+              "\xe8\xa1\xa8A(\xe6\x95\xb0\xe6\x8d\xae\xe6\x9d\xa5\xe6\xba\x90,\xe5\x9c\xa8\xe6\xad\xa4\xe7\xad\x9b\xe9\x80\x89):");  /* 表A(数据来源,在此筛选): */
+    g_flt.lbA = xui_label(dlg, 30, 36, 360, 20,
+                          "\xe6\x8b\x96\xe5\x85\xa5\xe6\x96\x87\xe4\xbb\xb6\xe5\x88\xb0\xe6\xad\xa4\xe5\xa4\x84");  /* 拖入文件到此处 */
+    xui_label(dlg, 30, 58, 360, 18,
+              "\xe6\x94\xaf\xe6\x8c\x81 xlsx / xls / csv / txt");      /* 支持 xlsx/xls/csv/txt */
+    xui_button(dlg, 344, 82, 92, 24,
+               "\xe7\x82\xb9\xe5\x87\xbb\xe9\x80\x89\xe6\x8b\xa9", flt_pick, (void *)(intptr_t)0);  /* 点击选择 */
+
+    /* 表B 槽(下半) */
+    xui_label(dlg, 20, 130, 260, 20,
+              "\xe8\xa1\xa8B(\xe5\x88\x97\xe7\xbb\x93\xe6\x9e\x84\xe6\xa8\xa1\xe6\x9d\xbf):");   /* 表B(列结构模板): */
+    g_flt.lbB = xui_label(dlg, 30, 154, 360, 20,
+                          "\xe6\x8b\x96\xe5\x85\xa5\xe6\x96\x87\xe4\xbb\xb6\xe5\x88\xb0\xe6\xad\xa4\xe5\xa4\x84");
+    xui_label(dlg, 30, 176, 360, 18,
+              "\xe6\x94\xaf\xe6\x8c\x81 xlsx / xls / csv / txt");
+    xui_button(dlg, 344, 200, 92, 24,
+               "\xe7\x82\xb9\xe5\x87\xbb\xe9\x80\x89\xe6\x8b\xa9", flt_pick, (void *)(intptr_t)1);
+
+    xui_label(dlg, 24, 232, 420, 20,
+              "\xe7\xad\x9b\xe9\x80\x89\xe6\x9d\xa1\xe4\xbb\xb6(\xe5\x90\x8c\xe6\x97\xb6\xe6\xbb\xa1\xe8\xb6\xb3;\xe7\x95\x99\xe7\xa9\xba=\xe4\xb8\x8d\xe7\xad\x9b;\xe5\x80\xbc\xe4\xb8\xba\xe5\x8c\x85\xe5\x90\xab\xe5\x8c\xb9\xe9\x85\x8d)");  /* 筛选条件(...) */
+    for (int i = 0; i < 3; i++) {
+        int y = 256 + i * 32;
+        g_flt.colCmb[i] = xui_combo(dlg, 24, y, 150, 24, flt_on_col, (void *)(intptr_t)i);
+        g_flt.valCmb[i] = xui_combo(dlg, 184, y, 252, 24, NULL, NULL);
+    }
+    xui_button(dlg, 24, 360, 140, 26,
+               "\xe9\xa2\x84\xe8\xa7\x88\xe7\xad\x9b\xe9\x80\x89\xe7\xbb\x93\xe6\x9e\x9c", flt_preview, NULL);  /* 预览筛选结果 */
+
+    XuiWgt *bGo = xui_button(dlg, 236, 506, 96, 28,
+                             "\xe5\xbc\x80\xe5\xa7\x8b\xe6\x8f\x90\xe5\x8f\x96", flt_go, NULL);  /* 开始提取 */
+    XuiWgt *bClose = xui_button(dlg, 344, 506, 70, 28,
+                                "\xe5\x85\xb3\xe9\x97\xad", NULL, NULL);                        /* 关闭 */
+    xui_window_set_default(dlg, bGo, bClose);
+    xui_window_run(dlg);
+    sheet_free(&g_flt.shA);
+    sheet_free(&g_flt.shB);
+    g_flt.dlg = NULL;
+}
+
 /* ===================== 设置对话框(与 Windows 设置中心对齐) ===================== */
 
 static unsigned ls_mod_to_x(int m);      /* 前向:定义在 on_hotkey 前,此处先用于重抓热键 */
@@ -1397,6 +1646,7 @@ int main(int argc, char **argv)
     mk_btn(g_win, &bx, "\xe5\x8f\x96\xe7\x82\xb9", on_quick_pick, NULL, 6); /* 取点 */
     mk_btn(g_win, &bx, "\xe5\xaf\xbc\xe5\x85\xa5", on_import, NULL, 6);    /* 导入 */
     mk_btn(g_win, &bx, "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96", on_extract, NULL, 6);  /* 数据提取 */
+    mk_btn(g_win, &bx, "\xe7\xad\x9b\xe9\x80\x89\xe6\x8f\x90\xe5\x8f\x96", on_filter, NULL, 6);  /* 筛选提取 */
     mk_btn(g_win, &bx, "\xe4\xbf\x9d\xe5\xad\x98\xe4\xbb\xbb\xe5\x8a\xa1", on_save, NULL, 18); /* 保存任务 */
     g_btn_start = mk_btn(g_win, &bx, "\xe5\xbc\x80\xe5\xa7\x8b\xe6\x89\xa7\xe8\xa1\x8c(F6)", on_start, NULL, 8);
     g_btn_stop = mk_btn(g_win, &bx, "\xe5\x81\x9c\xe6\xad\xa2(Ctrl+F12)", on_stop, NULL, 0);

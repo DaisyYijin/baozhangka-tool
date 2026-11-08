@@ -182,6 +182,56 @@ int sheet_parse_auto(const unsigned char *data, size_t len,
     return csv_parse(data, len, gbk, out);   /* 前向声明于上 */
 }
 
+int sheet_filter_rows_multi(const Sheet *src, const char *const *cols,
+                            const char *const *vals, int n, Sheet *out)
+{
+    if (!src || !out || !src->cells || src->rows < 1 || src->cols < 1) return -1;
+    if (n > 8) n = 8;
+    int ci[8];
+    for (int i = 0; i < n; i++) {
+        ci[i] = -1;                       /* 空列名/空值=该条件跳过 */
+        if (cols[i] && cols[i][0] && vals[i] && vals[i][0]) {
+            int found = -1;
+            for (int k = 0; k < src->cols; k++)
+                if (src->cells[0] && src->cells[0][k] &&
+                    strcmp(src->cells[0][k], cols[i]) == 0) { found = k; break; }
+            if (found < 0) return -1;     /* 条件列不存在 */
+            ci[i] = found;
+        }
+    }
+    out->cols = src->cols;
+    int cap = 64;
+    out->cells = (char ***)calloc((size_t)cap, sizeof(char **));
+    if (!out->cells) return -1;
+    out->rows = 0;
+    /* 追加一行(strdup 全列) */
+    #define FL_ADD_ROW(rr) do { \
+        if (out->rows >= cap) { \
+            cap *= 2; \
+            out->cells = (char ***)realloc(out->cells, (size_t)cap * sizeof(char **)); \
+        } \
+        out->cells[out->rows] = (char **)calloc((size_t)src->cols, sizeof(char *)); \
+        for (int kk = 0; kk < src->cols; kk++) \
+            out->cells[out->rows][kk] = strdup( \
+                (src->cells[rr] && src->cells[rr][kk]) ? src->cells[rr][kk] : ""); \
+        out->rows++; \
+    } while (0)
+
+    FL_ADD_ROW(0);                        /* 表头 */
+    for (int r = 1; r < src->rows; r++) {
+        int hit = 1;
+        for (int i = 0; i < n && hit; i++) {
+            if (ci[i] < 0) continue;
+            const char *cell = (src->cells[r] && src->cells[r][ci[i]])
+                             ? src->cells[r][ci[i]] : "";
+            if (!strstr(cell, vals[i])) hit = 0;   /* 包含式匹配 */
+        }
+        if (hit) FL_ADD_ROW(r);
+    }
+    #undef FL_ADD_ROW
+    return out->rows - 1;                 /* 命中数据行数 */
+}
+
 /* ---------------- XML 扫描工具 ---------------- */
 
 /* 查找下一个元素标签(跳过 <!-- 和 <?) */
