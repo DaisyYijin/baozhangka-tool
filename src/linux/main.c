@@ -24,6 +24,7 @@
 #include "import.h"
 #include "u8.h"
 #include "platform_x11.h"
+#include "lsettings.h"
 #include "findimg.h"
 #include "xui.h"
 
@@ -943,11 +944,36 @@ static void on_start(XuiWgt *btn, void *data) { (void)btn; (void)data; start_run
 static void on_stop(XuiWgt *btn, void *data) { (void)btn; (void)data; stop_run(); }
 
 /* 全局热键(XGrabKey 事件驱动) */
+/* LS_MOD_* 位 → X11 修饰 mask */
+static unsigned ls_mod_to_x(int m)
+{
+    unsigned x = 0;
+    if (m & LS_MOD_SHIFT) x |= ShiftMask;
+    if (m & LS_MOD_CTRL)  x |= ControlMask;
+    if (m & LS_MOD_ALT)   x |= Mod1Mask;
+    return x;
+}
+
+/* 暂停/继续(与 Windows F7 行为对齐) */
+static void toggle_pause(void)
+{
+    if (!g_running) return;
+    int on = !engine_paused();
+    engine_pause(on);
+    set_status(on ? "\xe5\xb7\xb2\xe6\x9a\x82\xe5\x81\x9c \xe2\x80\x94\xe2\x80\x94 \xe5\x86\x8d\xe6\x8c\x89\xe6\x9a\x82\xe5\x81\x9c\xe9\x94\xae\xe7\xbb\xa7\xe7\xbb\xad"   /* 已暂停 —— 再按暂停键继续 */
+                  : "\xe5\xb7\xb2\xe7\xbb\xa7\xe7\xbb\xad\xe6\x89\xa7\xe8\xa1\x8c");                                     /* 已继续执行 */
+}
+
 static void on_hotkey(XUi *ui, KeySym ks, unsigned state, void *ud)
 {
     (void)ui; (void)ud;
-    if (ks == XK_F6) start_run();
-    else if (ks == XK_F12 && (state & ControlMask)) stop_run();
+    unsigned m = state & (ShiftMask | ControlMask | Mod1Mask);
+    if (ks == ls_hot_ks(LS_HK_START) && m == ls_mod_to_x(ls_hot_mod(LS_HK_START)))
+        start_run();
+    else if (ks == ls_hot_ks(LS_HK_PAUSE) && m == ls_mod_to_x(ls_hot_mod(LS_HK_PAUSE)))
+        toggle_pause();
+    else if (ks == ls_hot_ks(LS_HK_STOP) && m == ls_mod_to_x(ls_hot_mod(LS_HK_STOP)))
+        stop_run();
 }
 
 static int on_close(XuiWin *w, void *ud)
@@ -1037,12 +1063,12 @@ int main(int argc, char **argv)
 
     refresh_list();
 
-    /* 全局热键:F6 开始 / Ctrl+F12 停止 */
+    /* 设置加载 + 主题色 + 全局热键(组合可配置,默认 F6/F7/Ctrl+F12) */
+    ls_load();
+    xui_set_theme(g_ui, ls_theme());
     xui_set_hotkey_fn(g_ui, on_hotkey, NULL);
-    if (xui_grab_keys(g_ui, XK_F6, 0) != 0)
-        set_status("\xe6\xb3\xa8\xe6\x84\x8f:F6 \xe5\x85\xa8\xe5\xb1\x80\xe7\x83\xad\xe9\x94\xae\xe6\xb3\xa8\xe5\x86\x8c\xe5\xa4\xb1\xe8\xb4\xa5"
-                   "(\xe5\x8f\xaf\xe7\x94\xa8\xe7\x95\x8c\xe9\x9d\xa2\xe6\x8c\x89\xe9\x92\xae\xe5\xbc\x80\xe5\xa7\x8b)");
-    xui_grab_keys(g_ui, XK_F12, ControlMask);
+    for (int i = 0; i < 3; i++)
+        xui_grab_keys(g_ui, (KeySym)ls_hot_ks(i), ls_mod_to_x(ls_hot_mod(i)));
 
     xui_window_show(g_win);
 

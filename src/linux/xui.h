@@ -38,10 +38,13 @@ void    xui_window_exit(XuiWin *w, int result);
 void    xui_window_set_key(XuiWin *w, XuiKeyFn fn, void *ud);
 void    xui_window_set_close(XuiWin *w, XuiCloseFn fn, void *ud);
 void    xui_window_set_default(XuiWin *w, XuiWgt *okBtn, XuiWgt *cancelBtn);
+void    xui_set_theme(XUi *ui, unsigned long rgb);   /* 主题色 0xRRGGBB(选中/强调色联动) */
+void    xui_ungrab_keys(XUi *ui, KeySym ks, unsigned mods); /* 解除全局热键 */
 
 /* ---- 控件(父窗口内绝对布局,坐标含边框) ---- */
 XuiWgt *xui_label (XuiWin *p, int x,int y,int w,int h, const char *utf8);
 XuiWgt *xui_button(XuiWin *p, int x,int y,int w,int h, const char *utf8, XuiFn cb, void *ud);
+XuiWgt *xui_button_col(XuiWin *p, int x,int y,int w,int h, unsigned long rgb, XuiFn cb, void *ud); /* 彩色按钮(色板) */
 XuiWgt *xui_entry (XuiWin *p, int x,int y,int w,int h, const char *initUtf8);
 XuiWgt *xui_check (XuiWin *p, int x,int y,int w,int h, const char *utf8, int checked, XuiFn cb, void *ud);
 XuiWgt *xui_combo (XuiWin *p, int x,int y,int w,int h, XuiFn onPick, void *ud);

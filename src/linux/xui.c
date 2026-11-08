@@ -63,6 +63,7 @@ struct XuiWgt {
     XuiListFn onSel, onAct; void *lud;
     /* button */
     int pressed;
+    unsigned long bgCol; int useBg;       /* 彩色按钮(色板块) */
 };
 
 struct XuiWin {
@@ -84,6 +85,7 @@ struct XUi {
     GC gc;
     Colormap cmap;
     unsigned long cFace, cWhite, cGray, cDark, cBlack, cSel, cSelText, cDis, cBar;
+    unsigned long cTheme;                 /* 主题色(与 cSel 联动) */
     Atom aDelWin, aUtf8, aClip, aPrim, aTargets, aIncr, aText, aCompound, aTextPlain;
     XIM im;
     int fdWake[2];
@@ -320,6 +322,12 @@ static void draw_wgt(XUi *ui, XuiWgt *g)
         clip_off(ui);
         break;
     case XUI_BUTTON: {
+        if (g->useBg) {                   /* 彩色按钮(色板块) */
+            XSetForeground(d, ui->gc, g->bgCol);
+            XFillRectangle(d, w, ui->gc, 0, 0, g->w, g->h);
+            box_raised(ui, w, 0, 0, g->w, g->h);
+            break;
+        }
         if (g->pressed) {
             XSetForeground(d, ui->gc, ui->cBar);
             XFillRectangle(d, w, ui->gc, 0, 0, g->w, g->h);
@@ -1222,6 +1230,37 @@ int xui_grab_keys(XUi *ui, KeySym ks, unsigned mods)
 }
 void xui_set_hotkey_fn(XUi *ui, XuiHotFn fn, void *ud) { ui->hotFn = fn; ui->hotUd = ud; }
 
+void xui_ungrab_keys(XUi *ui, KeySym ks, unsigned mods)
+{
+    KeyCode kc = XKeysymToKeycode(ui->dpy, ks);
+    if (!kc) return;
+    unsigned variants[4] = { mods, mods | LockMask, mods | Mod2Mask, mods | LockMask | Mod2Mask };
+    for (int i = 0; i < 4; i++)
+        XUngrabKey(ui->dpy, kc, variants[i], ui->hotWin);
+    XFlush(ui->dpy);
+}
+
+void xui_set_theme(XUi *ui, unsigned long rgb)
+{
+    char spec[16];
+    snprintf(spec, sizeof(spec), "#%06lx", rgb & 0xFFFFFF);
+    ui->cTheme = named_color(ui, spec);
+    ui->cSel = ui->cTheme;                /* 列表选中/焦点框随主题 */
+    XFlush(ui->dpy);
+    for (int i = 0; i < ui->nWins; i++)
+        if (ui->wins[i] && ui->wins[i]->win)
+            XClearArea(ui->dpy, ui->wins[i]->win, 0, 0, 0, 0, True);
+    XFlush(ui->dpy);
+}
+
+XuiWgt *xui_button_col(XuiWin *p, int x,int y,int w,int h,
+                       unsigned long rgb, XuiFn cb, void *ud)
+{
+    XuiWgt *g = xui_button(p, x, y, w, h, "", cb, ud);
+    if (g) { g->useBg = 1; g->bgCol = rgb; }
+    return g;
+}
+
 /* ==================== 消息框 ==================== */
 
 typedef struct { XuiWin *w; int result; } AlertCtx;
@@ -1485,6 +1524,7 @@ XUi *xui_open(void)
     ui->cDark  = named_color(ui, "#6e6c68");
     ui->cDis   = named_color(ui, "#9c9a96");
     ui->cSel   = named_color(ui, "#316ac5");
+    ui->cTheme = ui->cSel;                /* 默认主题=选中蓝 */
     ui->cSelText = named_color(ui, "#ffffff");
     ui->cBar   = named_color(ui, "#c8c4bc");
     ui->aDelWin   = XInternAtom(ui->dpy, "WM_DELETE_WINDOW", False);
