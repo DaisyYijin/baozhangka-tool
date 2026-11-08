@@ -158,9 +158,10 @@ uint8_t *zip_read(const uint8_t *data, size_t size, const char *name,
 
     uint8_t *out;
     if (e.method == 0) {                       /* stored */
-        out = (uint8_t *)malloc(csize ? csize : 1);
+        out = (uint8_t *)malloc(csize ? csize + 1 : 1);
         if (!out) return NULL;
         memcpy(out, src, csize);
+        out[csize] = 0;                     /* NUL 终止:调用方按 C 串扫描(strstr) */
         if (outLen) *outLen = csize;
         return out;
     }
@@ -174,6 +175,7 @@ uint8_t *zip_read(const uint8_t *data, size_t size, const char *name,
         size_t used = 0;
         int r = inflate_raw(src, csize, out, cap, &used);
         if (r == INFLATE_OK) {
+            out[used] = 0;                 /* NUL 终止(cap≥used+1):调用方 strstr 安全 */
             if (outLen) *outLen = used;
             return out;
         }
