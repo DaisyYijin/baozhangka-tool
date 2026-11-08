@@ -49,6 +49,7 @@ enum {
     IDC_BTN_HELP,
     IDC_BTN_SCHED,                  /* 定时执行设置 */
     IDC_BTN_SETTINGS,               /* 集中设置(主题色/快捷按钮/更多) */
+    IDC_BTN_EXTRACT,                /* 数据提取:按表B结构从表A取同名列 */
     IDC_ED_LOOPS, IDC_ED_GAP, IDC_ED_COUNTDOWN, IDC_ED_JITTER,
     IDC_BTN_DATA,                 /* Excel 数据行绑定(保留枚举) */
     IDC_CHK_EXCELROWS,            /* 勾选:循环次数=Excel 行数 */
@@ -1895,6 +1896,83 @@ static int input_dlg(HWND owner, const wchar_t *title, const wchar_t *prompt,
     return g_idlg.okClicked;
 }
 
+/* 数据提取:按表B(列结构模板)的表头,从表A提取同名列,导出 CSV */
+static void on_extract(void)
+{
+    wchar_t pa[MAX_PATH] = L"", pb[MAX_PATH] = L"", po[MAX_PATH] = L"";
+    OPENFILENAMEW ofn;
+    memset(&ofn, 0, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g_hMain;
+    ofn.lpstrFilter = L"表格文件 (*.xlsx;*.csv;*.txt) *.xlsx;*.csv;*.txt 所有文件 (*.*) *.* ";
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+    ofn.lpstrFile = pa;
+    ofn.lpstrTitle = L"数据提取 - 第 1 步:选择表A(数据来源)";
+    if (!GetOpenFileNameW(&ofn)) return;
+    pb[0] = 0;
+    ofn.lpstrFile = pb;
+    ofn.lpstrTitle = L"数据提取 - 第 2 步:选择表B(列结构模板)";
+    if (!GetOpenFileNameW(&ofn)) return;
+
+    /* 解析两表(首工作表;CSV 直接解析) */
+    Sheet a, b, out;
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    memset(&out, 0, sizeof(out));
+    size_t la = 0, lb = 0;
+    unsigned char *da = read_file_all(pa, &la);
+    unsigned char *db = read_file_all(pb, &lb);
+    int ok = 0;
+    if (da && db) {
+        int ra = (la >= 4 && da[0] == 'P' && da[1] == 'K')
+                   ? xlsx_parse_sheet(da, la, 0, &a)
+                   : csv_parse(da, la, win_gbk_to_utf8, &a);
+        int rb = (lb >= 4 && db[0] == 'P' && db[1] == 'K')
+                   ? xlsx_parse_sheet(db, lb, 0, &b)
+                   : csv_parse(db, lb, win_gbk_to_utf8, &b);
+        if (ra == 0 && rb == 0 && a.rows >= 1 && b.rows >= 1) ok = 1;
+    }
+    if (!ok) {
+        sheet_free(&a); sheet_free(&b);
+        free(da); free(db);
+        MessageBoxW(g_hMain, L"无法解析表格文件(需 xlsx 或 UTF-8/GBK 的 CSV)。",
+                    L"数据提取", MB_ICONINFORMATION);
+        return;
+    }
+    sheet_extract(&a, &b, &out);
+
+    /* 第 3 步:保存结果 CSV */
+    memset(&ofn, 0, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g_hMain;
+    ofn.lpstrFilter = L"CSV 文件 (*.csv) *.csv ";
+    ofn.lpstrFile = po;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
+    ofn.lpstrTitle = L"数据提取 - 第 3 步:保存结果";
+    wcscpy(po, L"提取结果.csv");
+    if (!GetSaveFileNameW(&ofn)) {
+        sheet_free(&a); sheet_free(&b); sheet_free(&out);
+        free(da); free(db);
+        return;
+    }
+    if (!wcsrchr(po, L'.')) wcscat(po, L".csv");
+    if (sheet_save_csv(&out, po) == 0) {
+        wchar_t m[300];
+        _snwprintf(m, 299,
+            L"提取完成:%d 列 × %d 行(含表头)\n表B有而表A没有的列为空。\n已保存:\n%s",
+            out.cols, out.rows, po);
+        m[299] = 0;
+        log_add(L"数据提取:%d 列 × %d 行 → %s", out.cols, out.rows, po);
+        MessageBoxW(g_hMain, m, L"数据提取", MB_ICONINFORMATION);
+    } else {
+        MessageBoxW(g_hMain, L"保存文件失败。", L"提示", MB_ICONINFORMATION);
+    }
+    sheet_free(&a); sheet_free(&b); sheet_free(&out);
+    free(da); free(db);
+}
+
 /* 收集列表勾选的步骤索引(升序);返回数量 */
 static int collect_checked(int *idx, int maxN)
 {
@@ -2326,6 +2404,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 { L"使用说明", IDC_BTN_HELP },
                 { L"定时",     IDC_BTN_SCHED },
                 { L"设置",     IDC_BTN_SETTINGS },
+                { L"数据提取", IDC_BTN_EXTRACT },
             };
             int ny = 14 + (NAV_BTN_H + 6) * 2 + 12;   /* 分隔区之后(任务/日志两页签) */
             int navN = (int)(sizeof(nav) / sizeof(nav[0]));
@@ -2740,6 +2819,9 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 /* 主题色/开关即时生效 */
                 settings_apply_ui();
             }
+            return 0;
+        case IDC_BTN_EXTRACT:
+            on_extract();
             return 0;
         case IDC_BTN_LOGCLEAR:
             SetWindowTextW(g_hLog, L"");

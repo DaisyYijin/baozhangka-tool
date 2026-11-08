@@ -926,6 +926,66 @@ static void on_toggle_dis(XuiWgt *btn, void *data)
     refresh_list();
 }
 
+/* 数据提取:按表B(列结构模板)的表头,从表A提取同名列,导出 CSV */
+static void on_extract(XuiWgt *btn, void *data)
+{
+    (void)btn; (void)data;
+    char *pa = xui_filesel(g_ui, g_win, 0,
+        "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96 - \xe9\x80\x89\xe8\xa1\xa8A(\xe6\x95\xb0\xe6\x8d\xae\xe6\x9d\xa5\xe6\xba\x90)",  /* 数据提取 - 选表A(数据来源) */
+        "xlsx,csv,txt", NULL);
+    if (!pa) return;
+    char *pb = xui_filesel(g_ui, g_win, 0,
+        "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96 - \xe9\x80\x89\xe8\xa1\xa8B(\xe5\x88\x97\xe7\xbb\x93\xe6\x9e\x84\xe6\xa8\xa1\xe6\x9d\xbf)",  /* 数据提取 - 选表B(列结构模板) */
+        "xlsx,csv,txt", NULL);
+    if (!pb) { free(pa); return; }
+
+    Sheet a, b, out;
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    memset(&out, 0, sizeof(out));
+    size_t la = 0, lb = 0;
+    unsigned char *da = read_file_all_from_utf8(pa, &la);
+    unsigned char *db = read_file_all_from_utf8(pb, &lb);
+    int ok = 0;
+    if (da && db) {
+        int ra = (la >= 4 && da[0] == 'P' && da[1] == 'K')
+                   ? xlsx_parse_sheet(da, la, 0, &a)
+                   : csv_parse(da, la, NULL, &a);
+        int rb = (lb >= 4 && db[0] == 'P' && db[1] == 'K')
+                   ? xlsx_parse_sheet(db, lb, 0, &b)
+                   : csv_parse(db, lb, NULL, &b);
+        if (ra == 0 && rb == 0 && a.rows >= 1 && b.rows >= 1) ok = 1;
+    }
+    free(da); free(db);
+    if (!ok) {
+        sheet_free(&a); sheet_free(&b);
+        free(pa); free(pb);
+        show_info("\xe6\x97\xa0\xe6\xb3\x95\xe8\xa7\xa3\xe6\x9e\x90\xe8\xa1\xa8\xe6\xa0\xbc\xe6\x96\x87\xe4\xbb\xb6");  /* 无法解析表格文件 */
+        return;
+    }
+    sheet_extract(&a, &b, &out);
+
+    char *po = xui_filesel(g_ui, g_win, 1,
+        "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96 - \xe4\xbf\x9d\xe5\xad\x98\xe7\xbb\x93\xe6\x9e\x9c",  /* 数据提取 - 保存结果 */
+        "csv", NULL);
+    if (po) {
+        wchar_t wpo[1024];
+        u8_to_wcs(po, wpo, 1023);
+        if (sheet_save_csv(&out, wpo) == 0) {
+            char m[300];
+            snprintf(m, sizeof(m),
+                     "\xe6\x8f\x90\xe5\x8f\x96\xe5\xae\x8c\xe6\x88\x90:%d \xe5\x88\x97 \xc3\x97 %d \xe8\xa1\x8c(\xe5\x90\xab\xe8\xa1\xa8\xe5\xa4\xb4) \xe2\x86\x92 %s",  /* 提取完成:N 列 × M 行(含表头) → 路径 */
+                     out.cols, out.rows, po);
+            set_status("%s", m);
+        } else {
+            show_info("\xe4\xbf\x9d\xe5\xad\x98\xe6\x96\x87\xe4\xbb\xb6\xe5\xa4\xb1\xe8\xb4\xa5");  /* 保存文件失败 */
+        }
+        free(po);
+    }
+    sheet_free(&a); sheet_free(&b); sheet_free(&out);
+    free(pa); free(pb);
+}
+
 /* ===================== 设置对话框(与 Windows 设置中心对齐) ===================== */
 
 static unsigned ls_mod_to_x(int m);      /* 前向:定义在 on_hotkey 前,此处先用于重抓热键 */
@@ -1260,6 +1320,7 @@ int main(int argc, char **argv)
     mk_btn(g_win, &bx, "\xe2\x86\x93", on_move, (void *)(intptr_t)1, 6);   /* ↓ */
     mk_btn(g_win, &bx, "\xe5\x8f\x96\xe7\x82\xb9", on_quick_pick, NULL, 6); /* 取点 */
     mk_btn(g_win, &bx, "\xe5\xaf\xbc\xe5\x85\xa5", on_import, NULL, 6);    /* 导入 */
+    mk_btn(g_win, &bx, "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96", on_extract, NULL, 6);  /* 数据提取 */
     mk_btn(g_win, &bx, "\xe4\xbf\x9d\xe5\xad\x98\xe4\xbb\xbb\xe5\x8a\xa1", on_save, NULL, 18); /* 保存任务 */
     g_btn_start = mk_btn(g_win, &bx, "\xe5\xbc\x80\xe5\xa7\x8b\xe6\x89\xa7\xe8\xa1\x8c(F6)", on_start, NULL, 8);
     g_btn_stop = mk_btn(g_win, &bx, "\xe5\x81\x9c\xe6\xad\xa2(Ctrl+F12)", on_stop, NULL, 0);

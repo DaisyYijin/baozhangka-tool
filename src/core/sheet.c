@@ -96,6 +96,75 @@ void sheet_trim_empty(Sheet *s)
     }
 }
 
+/* ---------------- 数据提取 / CSV 导出 ---------------- */
+
+int sheet_extract(const Sheet *a, const Sheet *b, Sheet *out)
+{
+    if (!a || !b || !out || !a->cells || !b->cells ||
+        a->rows < 1 || b->rows < 1 || b->cols < 1) return -1;
+    out->cells = (char ***)calloc((size_t)a->rows, sizeof(char **));
+    if (!out->cells) return -1;
+    out->rows = a->rows;               /* 行数(含表头)与 a 相同 */
+    out->cols = b->cols;
+    for (int r = 0; r < out->rows; r++) {
+        out->cells[r] = (char **)calloc((size_t)out->cols, sizeof(char *));
+        if (!out->cells[r]) return -1;
+    }
+    for (int c = 0; c < b->cols; c++) {
+        const char *want = (b->cells[0] && b->cells[0][c]) ? b->cells[0][c] : "";
+        int src = -1;                  /* 在 a 表头行找同名列 */
+        if (want[0])
+            for (int k = 0; k < a->cols; k++)
+                if (a->cells[0] && a->cells[0][k] &&
+                    strcmp(a->cells[0][k], want) == 0) { src = k; break; }
+        for (int r = 0; r < out->rows; r++) {
+            const char *v;
+            if (r == 0)
+                v = want;              /* 表头行=B 列名(保持 B 的结构) */
+            else
+                v = (src >= 0 && a->cells[r] && a->cells[r][src])
+                   ? a->cells[r][src] : "";
+            out->cells[r][c] = strdup(v);
+        }
+    }
+    return b->cols;
+}
+
+int sheet_save_csv(const Sheet *s, const wchar_t *path)
+{
+    if (!s || !path || !path[0] || !s->cells) return -1;
+    FILE *f = NULL;
+#ifdef _WIN32
+    f = _wfopen(path, L"wb");
+#else
+    char u8p[1024];
+    wcs_to_u8(path, u8p, sizeof(u8p) - 1);
+    f = fopen(u8p, "wb");
+#endif
+    if (!f) return -1;
+    fwrite("\xEF\xBB\xBF", 1, 3, f);   /* UTF-8 BOM:Excel 双击直接可读 */
+    for (int r = 0; r < s->rows; r++) {
+        if (!s->cells[r]) continue;
+        for (int c = 0; c < s->cols; c++) {
+            if (c) fputc(',', f);
+            const char *v = (s->cells[r][c]) ? s->cells[r][c] : "";
+            if (strpbrk(v, ",\"\r\n")) {  /* 含特殊字符:引号包裹+双写引号 */
+                fputc('"', f);
+                for (const char *p = v; *p; p++) {
+                    if (*p == '"') fputc('"', f);
+                    fputc(*p, f);
+                }
+                fputc('"', f);
+            } else {
+                fputs(v, f);
+            }
+        }
+        fputs("\r\n", f);
+    }
+    fclose(f);
+    return 0;
+}
+
 /* ---------------- XML 扫描工具 ---------------- */
 
 /* 查找下一个元素标签(跳过 <!-- 和 <?) */

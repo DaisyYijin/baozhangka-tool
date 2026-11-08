@@ -20,6 +20,12 @@ typedef struct {
 void sheet_free(Sheet *s);
 void sheet_trim_empty(Sheet *s);   /* 去掉全空的首尾行列 */
 
+/* 数据提取:以 b 的表头(第0行各列名)为模板,从 a 中取同名列生成 out
+   (表头=b 表头,行数与 a 相同;b 有而 a 无的列为空)。返回提取列数,-1=参数错 */
+int sheet_extract(const Sheet *a, const Sheet *b, Sheet *out);
+/* Sheet 写出 CSV(UTF-8 BOM+CRLF,Excel 双击可开);0=成功 */
+int sheet_save_csv(const Sheet *s, const wchar_t *path);
+
 /* 解析 .xlsx(zipped OOXML)。成功返回 0,使用第一个工作表。 */
 int xlsx_parse(const uint8_t *data, size_t size, Sheet *out);
 
