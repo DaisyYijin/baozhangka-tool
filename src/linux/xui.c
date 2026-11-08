@@ -58,7 +58,7 @@ struct XuiWgt {
     char **hdr;                 /* 每列表头文字 */
     char ***cells;
     int sel, top, dragBar, checkMode;
-    unsigned char *checked;           /* 勾选状态(行数变化时重建清零) */
+    unsigned char *listChecked;       /* 列表勾选状态(行数变化时重建清零) */
     int lastClickRow; Time lastClickTime;
     XuiListFn onSel, onAct; void *lud;
     /* button */
@@ -440,7 +440,7 @@ static void draw_wgt(XUi *ui, XuiWgt *g)
                 int bx = 4, by = yy + (rowH - 12) / 2;
                 XSetForeground(d, ui->gc, ui->cBlack);
                 XDrawRectangle(d, w, ui->gc, bx, by, 12, 12);
-                if (g->checked && g->checked[row]) {
+                if (g->listChecked && g->listChecked[row]) {
                     XDrawLine(d, w, ui->gc, bx + 2, by + 6, bx + 5, by + 9);
                     XDrawLine(d, w, ui->gc, bx + 5, by + 9, bx + 10, by + 2);
                 }
@@ -600,8 +600,8 @@ static void list_free_cells(XuiWgt *l)
 void xui_list_set_rows(XuiWgt *l, int nRows)
 {
     list_free_cells(l);
-    free(l->checked);                 /* 数据重建:勾选清零 */
-    l->checked = nRows > 0 ? (unsigned char *)calloc((size_t)nRows, 1) : NULL;
+    free(l->listChecked);             /* 数据重建:勾选清零 */
+    l->listChecked = nRows > 0 ? (unsigned char *)calloc((size_t)nRows, 1) : NULL;
     if (nRows > 0) {
         l->cells = (char ***)calloc((size_t)nRows, sizeof(char **));
         for (int r = 0; r < nRows; r++) {
@@ -629,8 +629,8 @@ void xui_list_enable_check(XuiWgt *l, int on)
 
 int xui_list_checked(XuiWgt *l, int row)
 {
-    return (l && l->type == XUI_LIST && l->checked &&
-            row >= 0 && row < l->rows) ? l->checked[row] : 0;
+    return (l && l->type == XUI_LIST && l->listChecked &&
+            row >= 0 && row < l->rows) ? l->listChecked[row] : 0;
 }
 void xui_list_set_header(XuiWgt *l, int col, const char *utf8)
 {
@@ -1035,7 +1035,7 @@ static void on_button(XUi *ui, XEvent *ev)
         int row = (y - rowH) / rowH + g->top;
         if (row >= 0 && row < g->rows && y >= rowH) {
             if (g->checkMode && x >= 0 && x < 20) {   /* 点勾选框=切换选区 */
-                if (g->checked) g->checked[row] = !g->checked[row];
+                if (g->listChecked) g->listChecked[row] = !g->listChecked[row];
                 wgt_redraw(g);
                 return;
             }
