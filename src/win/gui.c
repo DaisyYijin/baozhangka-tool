@@ -625,16 +625,16 @@ static void settings_apply_ui(void)
     if (g_hFloat && IsWindowVisible(g_hFloat)) InvalidateRect(g_hFloat, NULL, FALSE);
 }
 
-#define FLT_W 336
-#define FLT_H 84
-/* 第一行:状态圆点+进度;第二行(y=FLT_ROW2_Y 起):4 个按钮 */
+#define FLT_W 384
+#define FLT_H 96
+/* 第一行:状态圆点+进度;第二行(y=FLT_ROW2_Y 起):4 个按钮(两行文字:动词+快捷键) */
 #define FLT_ROW2_Y  42
-#define FLT_BTN_H   28
+#define FLT_BTN_H   38
 
 static void flt_btn_rect(int i, RECT *rc)
 {
-    static const int bw[4] = { 64, 64, 64, 80 };   /* 开始/暂停/继续/停止 */
-    int total = 64 * 3 + 80 + 6 * 3;               /* 按钮+间距 */
+    static const int bw[4] = { 74, 74, 74, 88 };   /* 开始/暂停/继续/停止 */
+    int total = 74 * 3 + 88 + 6 * 3;               /* 按钮+间距 */
     int x = (FLT_W - total) / 2;
     for (int k = 0; k < i; k++) x += bw[k] + 6;
     SetRect(rc, x, FLT_ROW2_Y + 8, x + bw[i], FLT_ROW2_Y + 8 + FLT_BTN_H);
@@ -743,10 +743,10 @@ static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             hk_text(t1, 32, settings_pause_mod(), settings_pause_hotkey());
             hk_text(t2, 32, settings_pause_mod(), settings_pause_hotkey());
             hk_text(t3, 32, settings_stop_mod(),  settings_stop_hotkey());
-            swprintf(lbl[0], 56, L"开始 %ls", t0);
-            swprintf(lbl[1], 56, L"暂停 %ls", t1);
-            swprintf(lbl[2], 56, L"继续 %ls", t2);
-            swprintf(lbl[3], 56, L"停止 %ls", t3);
+            swprintf(lbl[0], 56, L"开始\n%ls", t0);
+            swprintf(lbl[1], 56, L"暂停\n%ls", t1);
+            swprintf(lbl[2], 56, L"继续\n%ls", t2);
+            swprintf(lbl[3], 56, L"停止\n%ls", t3);
             const wchar_t *btnTxt[4] = { lbl[0], lbl[1], lbl[2], lbl[3] };
             HGDIOBJ ofb = SelectObject(mem, g_uiFont);
             for (int i = 0; i < 4; i++) {
@@ -767,7 +767,7 @@ static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 DeleteObject(penB);
                 SetTextColor(mem, en ? RGB(255,255,255) : RGB(0xA8,0xA8,0xA8));
                 DrawTextW(mem, btnTxt[i], -1, &rb,
-                          DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                          DT_CENTER | DT_VCENTER | DT_WORDBREAK | DT_END_ELLIPSIS);
             }
             SelectObject(mem, ofb);
         }
