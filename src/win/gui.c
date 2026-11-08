@@ -1808,7 +1808,10 @@ static void layout_children(int cx, int cy)
     MoveWindow(g_hBtn[2], mx + 484, gy, 52, 22, TRUE);
     MoveWindow(GetDlgItem(g_hMain, IDC_LB4), mx + 588, gy + 4, 78, 20, TRUE);
     MoveWindow(g_hBtn[3], mx + 670, gy, 52, 22, TRUE);
-    /* 快捷按钮(悬浮窗)已按需求移除;TAB 行(只显示 g_tabCount 个 + ＋按钮;删除用 TAB 内嵌 ×) */
+    /* 悬浮窗开关:紧随设置行,与输入框垂直对齐 */
+    MoveWindow(GetDlgItem(g_hMain, IDC_BTN_FLOAT), mx + 736, gy - 1, 88, 24, TRUE);
+
+    /* TAB 行(只显示 g_tabCount 个 + ＋按钮;删除用 TAB 内嵌 ×) */
     {
         int tx = mx;
         for (int i = 0; i < MAX_TASKS; i++) {
@@ -2073,7 +2076,11 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
         }
 
-        /* ---- 主区顶部(无标题;快捷按钮已按需求移除) ---- */
+        /* ---- 主区顶部 ---- */
+
+        /* 悬浮窗开关:与设置行对齐 */
+        HWND btnFloat = mk(L"BUTTON", L"悬浮窗", BS_OWNERDRAW, 0, 0, 88, 24, IDC_BTN_FLOAT);
+        (void)btnFloat;
 
         /* ---- 步骤 TAB 行(动态:默认1个,可添加到8个;删除点 TAB 内嵌 ×;双击重命名) ---- */
         for (int i = 0; i < MAX_TASKS; i++) {
@@ -2230,6 +2237,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     draw_accent_button(dis, ThemeColor(), RGB(0x33,0xAA,0xFF), RGB(0x00,0x7A,0xD4), FALSE);
                 return TRUE;
             case IDC_BTN_LOGCLEAR:
+            case IDC_BTN_FLOAT:
                 draw_flat_button(dis);
                 return TRUE;
             default:
@@ -2295,6 +2303,10 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             HWND newHot = NULL;
             for (int i = 4; i <= 14; i++)
                 if (g_hBtn[i] && under == g_hBtn[i]) { newHot = g_hBtn[i]; break; }
+            if (!newHot) {
+                HWND floatBtn = GetDlgItem(g_hMain, IDC_BTN_FLOAT);
+                if (floatBtn && under == floatBtn) newHot = floatBtn;
+            }
             if (!newHot && g_page == 0) {
                 for (int i = 0; i < MAX_TASKS; i++)
                     if (g_hTabs[i] && under == g_hTabs[i]) { newHot = g_hTabs[i]; break; }
@@ -2462,6 +2474,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             SetWindowTextW(g_hLog, L"");
             log_add(L"日志已清空");
             return 0;
+        case IDC_BTN_FLOAT:  float_toggle(); return 0;
         case IDC_BTN_ADD:    add_step();   return 0;
         case IDC_BTN_EDIT:   edit_step();  return 0;
         case IDC_BTN_DEL:    del_step();   return 0;
