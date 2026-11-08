@@ -2136,6 +2136,8 @@ static void on_extract(void)
         wc.lpfnWndProc = ex_wndproc;
         wc.hInstance = GetModuleHandleW(NULL);
         wc.lpszClassName = L"AcExtractDlg";
+        wc.style = CS_HREDRAW | CS_VREDRAW;
+        wc.hCursor = LoadCursorW(NULL, (LPCWSTR)IDC_ARROW);
         wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
         RegisterClassW(&wc);
         registered = 1;
@@ -2161,8 +2163,10 @@ static void on_extract(void)
         SendMessageW(g_ex.btnClose, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
     }
     DragAcceptFiles(g_ex.hwnd, TRUE);    /* 整窗接收,按落点分表A/表B */
-    if (!AnimateWindow(g_ex.hwnd, 150, AW_BLEND))
-        ShowWindow(g_ex.hwnd, SW_SHOW);
+    /* 直显(不用 AnimateWindow:AW_BLEND 不产生无效区,配合 WM_ERASEBKGND 拦截
+       会导致 WM_PAINT 不触发、客户区停留未初始化的黑色内存) */
+    ShowWindow(g_ex.hwnd, SW_SHOW);
+    InvalidateRect(g_ex.hwnd, NULL, TRUE);   /* 强制全客户区无效→WM_PAINT 全量绘制 */
     UpdateWindow(g_ex.hwnd);
     EnableWindow(g_hMain, FALSE);
     g_uiDlgActive = 1;
