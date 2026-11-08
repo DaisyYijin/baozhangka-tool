@@ -23,6 +23,9 @@ static const wchar_t SET_DLG_CLASS[] = L"AcSettingsDlg";
 #define SID_HK_FLOAT    120
 #define SID_HK_PAUSE    121
 #define SID_HK_STOP     122
+#define SID_HKMOD_FLOAT 124   /* 修饰键下拉 */
+#define SID_HKMOD_PAUSE 125
+#define SID_HKMOD_STOP  126
 #define SID_HELP1       130   /* 快捷键说明行1(STATIC,CTLCOLOR 控底色) */
 #define SID_HELP2       131   /* 快捷键说明行2 */
 #define SID_HELP3       132   /* 预留区说明 */
@@ -52,12 +55,27 @@ static const struct { int vk; const wchar_t *label; } HK_OPTIONS[] = {
 };
 #define HK_OPT_N ((int)(sizeof(HK_OPTIONS) / sizeof(HK_OPTIONS[0])))
 
+/* 修饰键选项(组合键) */
+static const struct { int mod; const wchar_t *label; } MOD_OPTIONS[] = {
+    { 0,                            L"\x65E0" },                  /* 无 */
+    { MOD_CONTROL,                  L"Ctrl+" },
+    { MOD_ALT,                      L"Alt+" },
+    { MOD_SHIFT,                    L"Shift+" },
+    { MOD_CONTROL | MOD_ALT,        L"Ctrl+Alt+" },
+    { MOD_CONTROL | MOD_SHIFT,      L"Ctrl+Shift+" },
+    { MOD_ALT | MOD_SHIFT,          L"Alt+Shift+" },
+    { MOD_CONTROL | MOD_ALT | MOD_SHIFT, L"Ctrl+Alt+Shift+" },
+};
+#define MOD_OPT_N ((int)(sizeof(MOD_OPTIONS) / sizeof(MOD_OPTIONS[0])))
+
 static struct {
     HWND hwnd, ok, cancel;
     HWND hkFloat, hkPause, hkStop;
+    HWND hkModFloat, hkModPause, hkModStop;
     int done, result;
     COLORREF theme;
     int hkFloatVk, hkPauseVk, hkStopVk;
+    int floatMod, pauseMod, stopMod;
 } g_st;
 
 /* 色块命中:返回索引 0-7,-1=未命中 */
@@ -181,6 +199,12 @@ static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (sf >= 0 && sf < HK_OPT_N) g_st.hkFloatVk = HK_OPTIONS[sf].vk;
             if (sp >= 0 && sp < HK_OPT_N) g_st.hkPauseVk = HK_OPTIONS[sp].vk;
             if (ss >= 0 && ss < HK_OPT_N) g_st.hkStopVk  = HK_OPTIONS[ss].vk;
+            int mf = (int)SendMessageW(g_st.hkModFloat, CB_GETCURSEL, 0, 0);
+            int mp = (int)SendMessageW(g_st.hkModPause, CB_GETCURSEL, 0, 0);
+            int ms = (int)SendMessageW(g_st.hkModStop,  CB_GETCURSEL, 0, 0);
+            if (mf >= 0 && mf < MOD_OPT_N) g_st.floatMod = MOD_OPTIONS[mf].mod;
+            if (mp >= 0 && mp < MOD_OPT_N) g_st.pauseMod = MOD_OPTIONS[mp].mod;
+            if (ms >= 0 && ms < MOD_OPT_N) g_st.stopMod  = MOD_OPTIONS[ms].mod;
             g_st.result = 1;
             g_st.done = 1;
         } else if (id == SID_CANCEL) {
@@ -203,8 +227,11 @@ int settings_dialog(HWND owner)
     memset(&g_st, 0, sizeof(g_st));
     g_st.theme = ThemeColor();
     g_st.hkFloatVk = settings_float_hotkey();
+    g_st.floatMod  = settings_float_mod();
     g_st.hkPauseVk = settings_pause_hotkey();
+    g_st.pauseMod  = settings_pause_mod();
     g_st.hkStopVk  = settings_stop_hotkey();
+    g_st.stopMod   = settings_stop_mod();
 
     WNDCLASSW wc;
     memset(&wc, 0, sizeof(wc));
@@ -230,22 +257,37 @@ int settings_dialog(HWND owner)
     if (!g_st.hwnd) return 0;
 
     /* --- 全局快捷键(y=158 区,三行下拉) --- */
-    static const struct { const wchar_t *lbl; int defIdx; int id; } hkRows[] = {
-        { L"\x5F00\x59CB\x952E:",  1, SID_HK_FLOAT },   /* 开始键: */
-        { L"\x6682\x505C\x952E:",  2, SID_HK_PAUSE },   /* 暂停键: */
-        { L"\x505C\x6B62\x952E:",  7, SID_HK_STOP  },   /* 停止键: */
+    static const struct { const wchar_t *lbl; int defIdx; int id; int modId; } hkRows[] = {
+        { L"\x5F00\x59CB\x952E:",  1, SID_HK_FLOAT, SID_HKMOD_FLOAT },   /* 开始键: */
+        { L"\x6682\x505C\x952E:",  2, SID_HK_PAUSE, SID_HKMOD_PAUSE },   /* 暂停键: */
+        { L"\x505C\x6B62\x952E:",  7, SID_HK_STOP,  SID_HKMOD_STOP  },   /* 停止键: */
     };
-    HWND *hkHwnds[] = { &g_st.hkFloat, &g_st.hkPause, &g_st.hkStop };
-    int *hkVals[]   = { &g_st.hkFloatVk, &g_st.hkPauseVk, &g_st.hkStopVk };
+    HWND *hkHwnds[]    = { &g_st.hkFloat, &g_st.hkPause, &g_st.hkStop };
+    HWND *hkModHwnds[] = { &g_st.hkModFloat, &g_st.hkModPause, &g_st.hkModStop };
+    int *hkVals[]    = { &g_st.hkFloatVk, &g_st.hkPauseVk, &g_st.hkStopVk };
+    int *hkModVals[] = { &g_st.floatMod, &g_st.pauseMod, &g_st.stopMod };
     for (int r = 0; r < 3; r++) {
         HWND lbl = CreateWindowExW(0, L"STATIC", hkRows[r].lbl,
             WS_CHILD | WS_VISIBLE, 20, 157 + r * 26, 64, 22,
             g_st.hwnd, NULL, wc.hInstance, NULL);
         if (lbl && g_uiFont)   /* 标签统一雅黑,与下拉/说明/按钮一致 */
             SendMessageW(lbl, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+        /* 修饰键下拉(组合键) */
+        *hkModHwnds[r] = CreateWindowExW(0, L"COMBOBOX", L"",
+            CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE | WS_VSCROLL,
+            88, 155 + r * 26, 96, 220,
+            g_st.hwnd, (HMENU)hkRows[r].modId, wc.hInstance, NULL);
+        for (int i = 0; i < MOD_OPT_N; i++) {
+            SendMessageW(*hkModHwnds[r], CB_ADDSTRING, 0, (LPARAM)MOD_OPTIONS[i].label);
+            if (MOD_OPTIONS[i].mod == *hkModVals[r])
+                SendMessageW(*hkModHwnds[r], CB_SETCURSEL, i, 0);
+        }
+        if (SendMessageW(*hkModHwnds[r], CB_GETCURSEL, 0, 0) == CB_ERR)
+            SendMessageW(*hkModHwnds[r], CB_SETCURSEL, 0, 0);
+        /* 主键下拉 */
         *hkHwnds[r] = CreateWindowExW(0, L"COMBOBOX", L"",
             CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE | WS_VSCROLL,
-            88, 155 + r * 26, 110, 250,
+            192, 155 + r * 26, 104, 250,
             g_st.hwnd, (HMENU)hkRows[r].id, wc.hInstance, NULL);
         for (int i = 0; i < HK_OPT_N; i++) {
             SendMessageW(*hkHwnds[r], CB_ADDSTRING, 0, (LPARAM)HK_OPTIONS[i].label);
@@ -258,11 +300,11 @@ int settings_dialog(HWND owner)
 
     /* --- 说明文字(STATIC ×3:快捷键说明两行+预留区一行;高 22 防裁剪,行距 24 与后续区不叠) --- */
     CreateWindowExW(0, L"STATIC",
-        L"\x5F00\x59CB=\x542F\x52A8\x4EFB\x52A1\x20\x20\x6682\x505C=\x6682\x505C/\x7EE7\x7EED\x20\x20\x505C\x6B62=Ctrl+\x6240\x9009\x952E",   /* 开始=启动任务  暂停=暂停/继续  停止=Ctrl+所选键 */
+        L"\x5F00\x59CB=\x542F\x52A8\x4EFB\x52A1\x20\x20\x6682\x505C=\x6682\x505C/\x7EE7\x7EED\x20\x20\x505C\x6B62=\x505C\x6B62\x4EFB\x52A1",   /* 开始=启动任务  暂停=暂停/继续  停止=停止任务 */
         WS_CHILD | WS_VISIBLE, 20, 240, 364, 22,
         g_st.hwnd, (HMENU)SID_HELP1, wc.hInstance, NULL);
     CreateWindowExW(0, L"STATIC",
-        L"\x4FEE\x6539\x540E\x70B9\x300C\x786E\x5B9A\x300D\x7ACB\x5373\x751F\x6548\xFF0C\x65E0\x9700\x91CD\x542F",   /* 修改后点「确定」立即生效,无需重启 */
+        L"\x4FEE\x9970\x952E+\x4E3B\x952E\x81EA\x7531\x7EC4\x5408\xFF0C\x70B9\x300C\x786E\x5B9A\x300D\x7ACB\x5373\x751F\x6548",   /* 修饰键+主键自由组合,点「确定」立即生效 */
         WS_CHILD | WS_VISIBLE, 20, 264, 364, 22,
         g_st.hwnd, (HMENU)SID_HELP2, wc.hInstance, NULL);
     CreateWindowExW(0, L"STATIC",
@@ -282,6 +324,7 @@ int settings_dialog(HWND owner)
 
     if (g_uiFont) {
         HWND kids[] = { g_st.hkFloat, g_st.hkPause, g_st.hkStop,
+                        g_st.hkModFloat, g_st.hkModPause, g_st.hkModStop,
                         g_st.ok, g_st.cancel, NULL };
         for (int i = 0; kids[i]; i++)
             SendMessageW(kids[i], WM_SETFONT, (WPARAM)g_uiFont, TRUE);
@@ -324,5 +367,8 @@ int settings_dialog(HWND owner)
 
 /* 对话框结束后取所选值(gui.c 使用) */
 int settings_dlg_float_hotkey(void) { return g_st.hkFloatVk; }
+int settings_dlg_float_mod(void)    { return g_st.floatMod; }
 int settings_dlg_pause_hotkey(void) { return g_st.hkPauseVk; }
+int settings_dlg_pause_mod(void)    { return g_st.pauseMod; }
 int settings_dlg_stop_hotkey(void)  { return g_st.hkStopVk; }
+int settings_dlg_stop_mod(void)     { return g_st.stopMod; }

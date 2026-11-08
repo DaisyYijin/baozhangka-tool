@@ -19,16 +19,24 @@ int settings_dialog(HWND owner);   /* 设置对话框(模态);返回1=有变更�
 void settings_set_theme_color(COLORREF c);      /* 保存并即时生效 */
 const COLORREF *settings_theme_presets(int *n); /* 预设色板(当前 8 色) */
 
-/* 悬浮窗快捷键(可配置,默认 F6/F7/Ctrl+F12) */
+/* 全局快捷键(可配置,默认 F6/F7/Ctrl+F12;支持修饰键组合) */
 int settings_float_hotkey(void);       /* 返回 VK_xx */
-int settings_pause_hotkey(void);       /* 返回 VK_xx */
-int settings_stop_hotkey(void);        /* 返回 VK_xx(修饰固定 Ctrl) */
-void settings_set_hotkeys(int floatVk, int pauseVk, int stopVk);
+int settings_float_mod(void);          /* 返回 MOD_ 组合(0=无) */
+int settings_pause_hotkey(void);
+int settings_pause_mod(void);
+int settings_stop_hotkey(void);
+int settings_stop_mod(void);
+void settings_set_hotkeys(int floatVk, int floatMod,
+                          int pauseVk, int pauseMod,
+                          int stopVk,  int stopMod);
 
 /* 设置对话框结束后取所选快捷键(dlg_settings.c 内部) */
 int settings_dlg_float_hotkey(void);
+int settings_dlg_float_mod(void);
 int settings_dlg_pause_hotkey(void);
+int settings_dlg_pause_mod(void);
 int settings_dlg_stop_hotkey(void);
+int settings_dlg_stop_mod(void);
 
 /* ---- 预留扩展:后续设置项在此追加接口 ---- */
 

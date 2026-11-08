@@ -2170,9 +2170,9 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                                     GetModuleHandleW(NULL), NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
 
-        RegisterHotKey(hwnd, HOTK_STOP, MOD_CONTROL, VK_F12);
-        RegisterHotKey(hwnd, HOTK_START, 0, VK_F6);
-        RegisterHotKey(hwnd, HOTK_PAUSE, 0, VK_F7);
+        RegisterHotKey(hwnd, HOTK_STOP,  settings_stop_mod(),  settings_stop_hotkey());
+        RegisterHotKey(hwnd, HOTK_START, settings_float_mod(), settings_float_hotkey());
+        RegisterHotKey(hwnd, HOTK_PAUSE, settings_pause_mod(), settings_pause_hotkey());
         SetTimer(hwnd, 3, 30, NULL);          /* 按钮悬停轮询 */
         SetTimer(hwnd, 9, 60000, NULL);   /* 定时执行检查 */
 
@@ -2436,20 +2436,23 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         case IDC_BTN_SETTINGS:
             if (settings_dialog(hwnd)) {
-                /* 快捷键变更:重新注册热键 */
-                int newF = settings_dlg_float_hotkey();
-                int newP = settings_dlg_pause_hotkey();
-                int newS = settings_dlg_stop_hotkey();
-                if (newF != settings_float_hotkey() ||
-                    newP != settings_pause_hotkey() ||
-                    newS != settings_stop_hotkey()) {
+                /* 快捷键/修饰键变更:重新注册热键 */
+                int newF  = settings_dlg_float_hotkey();
+                int newFM = settings_dlg_float_mod();
+                int newP  = settings_dlg_pause_hotkey();
+                int newPM = settings_dlg_pause_mod();
+                int newS  = settings_dlg_stop_hotkey();
+                int newSM = settings_dlg_stop_mod();
+                if (newF != settings_float_hotkey() || newFM != settings_float_mod() ||
+                    newP != settings_pause_hotkey() || newPM != settings_pause_mod() ||
+                    newS != settings_stop_hotkey()  || newSM != settings_stop_mod()) {
                     UnregisterHotKey(hwnd, HOTK_START);
                     UnregisterHotKey(hwnd, HOTK_PAUSE);
                     UnregisterHotKey(hwnd, HOTK_STOP);
-                    settings_set_hotkeys(newF, newP, newS);
-                    RegisterHotKey(hwnd, HOTK_STOP, MOD_CONTROL, settings_stop_hotkey());
-                    RegisterHotKey(hwnd, HOTK_START, 0, settings_float_hotkey());
-                    RegisterHotKey(hwnd, HOTK_PAUSE, 0, settings_pause_hotkey());
+                    settings_set_hotkeys(newF, newFM, newP, newPM, newS, newSM);
+                    RegisterHotKey(hwnd, HOTK_STOP,  settings_stop_mod(),  settings_stop_hotkey());
+                    RegisterHotKey(hwnd, HOTK_START, settings_float_mod(), settings_float_hotkey());
+                    RegisterHotKey(hwnd, HOTK_PAUSE, settings_pause_mod(), settings_pause_hotkey());
                 }
                 /* 主题色/开关即时生效 */
                 settings_apply_ui();
