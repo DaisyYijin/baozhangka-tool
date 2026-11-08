@@ -925,6 +925,8 @@ static void on_toggle_dis(XuiWgt *btn, void *data)
 
 /* ===================== 设置对话框(与 Windows 设置中心对齐) ===================== */
 
+static unsigned ls_mod_to_x(int m);      /* 前向:定义在 on_hotkey 前,此处先用于重抓热键 */
+
 /* 预设主题色(与 Windows 一致) */
 static const unsigned long THEME8[8] = {
     0x0099FFUL, 0x2E7D32UL, 0xE53E3EUL, 0x8E24AAUL,
