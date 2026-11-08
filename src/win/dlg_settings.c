@@ -23,6 +23,9 @@ static const wchar_t SET_DLG_CLASS[] = L"AcSettingsDlg";
 #define SID_HK_FLOAT    120
 #define SID_HK_PAUSE    121
 #define SID_HK_STOP     122
+#define SID_HELP1       130   /* 快捷键说明行1(STATIC,CTLCOLOR 控底色) */
+#define SID_HELP2       131   /* 快捷键说明行2 */
+#define SID_HELP3       132   /* 预留区说明 */
 
 /* ---- 色板几何(主窗口自绘区) ---- */
 #define PAL_X   20
@@ -142,20 +145,18 @@ static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         TextOutW(dc, 16, 266, L"\x66F4\x591A\x8BBE\x7F6E\xFF08\x9884\x7559\xFF09", 8);
         SelectObject(dc, of);
 
-        /* 快捷键说明(两行,浅灰小字) */
-        HGDIOBJ of3 = SelectObject(dc, g_uiFont);
-        SetTextColor(dc, RGB(0x8A,0x8A,0x8A));
-        TextOutW(dc, 20, 232,
-                 L"\x5F00\x59CB=\x542F\x52A8\x4EFB\x52A1\x20\x20\x6682\x505C=\x6682\x505C/\x7EE7\x7EED\x20\x20\x505C\x6B62=Ctrl+\x6240\x9009\x952E", 24); /* 开始=启动任务  暂停=暂停/继续  停止=Ctrl+所选键 */
-        TextOutW(dc, 20, 250,
-                 L"\x4FEE\x6539\x540E\x70B9\x300C\x786E\x5B9A\x300D\x7ACB\x5373\x751F\x6548\xFF0C\x65E0\x9700\x91CD\x542F", 17); /* 修改后点「确定」立即生效,无需重启 */
-        /* 预留区说明 */
-        TextOutW(dc, 16, 286,
-                 L"\x540E\x7EED\x7248\x672C\x5C06\x5728\x6B64\x589E\x52A0\x66F4\x591A\x914D\x7F6E\x9879", 15);
-        SelectObject(dc, of3);
-
         EndPaint(hwnd, &ps);
         return 0;
+    }
+
+    case WM_CTLCOLORSTATIC: {
+        /* 说明文字(STATIC):白底+浅灰字;普通标签:白底+深灰字(显式控制避免系统默认灰底) */
+        HDC hdc = (HDC)wp;
+        int cid = GetDlgCtrlID((HWND)lp);
+        SetBkColor(hdc, CARD_BG);
+        SetTextColor(hdc, (cid == SID_HELP1 || cid == SID_HELP2 || cid == SID_HELP3)
+                           ? RGB(0x8A,0x8A,0x8A) : RGB(0x3A,0x3A,0x3A));
+        return (LRESULT)GetStockObject(WHITE_BRUSH);
     }
 
     case WM_LBUTTONUP: {
@@ -253,6 +254,20 @@ int settings_dialog(HWND owner)
             SendMessageW(*hkHwnds[r], CB_SETCURSEL, hkRows[r].defIdx, 0);
     }
 
+    /* --- 说明文字(STATIC ×3:快捷键说明两行+预留区一行) --- */
+    CreateWindowExW(0, L"STATIC",
+        L"\x5F00\x59CB=\x542F\x52A8\x4EFB\x52A1\x20\x20\x6682\x505C=\x6682\x505C/\x7EE7\x7EED\x20\x20\x505C\x6B62=Ctrl+\x6240\x9009\x952E",   /* 开始=启动任务  暂停=暂停/继续  停止=Ctrl+所选键 */
+        WS_CHILD | WS_VISIBLE, 20, 232, 364, 18,
+        g_st.hwnd, (HMENU)SID_HELP1, wc.hInstance, NULL);
+    CreateWindowExW(0, L"STATIC",
+        L"\x4FEE\x6539\x540E\x70B9\x300C\x786E\x5B9A\x300D\x7ACB\x5373\x751F\x6548\xFF0C\x65E0\x9700\x91CD\x542F",   /* 修改后点「确定」立即生效,无需重启 */
+        WS_CHILD | WS_VISIBLE, 20, 250, 364, 18,
+        g_st.hwnd, (HMENU)SID_HELP2, wc.hInstance, NULL);
+    CreateWindowExW(0, L"STATIC",
+        L"\x540E\x7EED\x7248\x672C\x5C06\x5728\x6B64\x589E\x52A0\x66F4\x591A\x914D\x7F6E\x9879",   /* 后续版本将在此增加更多配置项 */
+        WS_CHILD | WS_VISIBLE, 16, 286, 340, 18,
+        g_st.hwnd, (HMENU)SID_HELP3, wc.hInstance, NULL);
+
     /* --- 底部按钮 --- */
     g_st.ok = CreateWindowExW(0, L"BUTTON",
         L"\x786E\x5B9A",
@@ -268,6 +283,11 @@ int settings_dialog(HWND owner)
                         g_st.ok, g_st.cancel, NULL };
         for (int i = 0; kids[i]; i++)
             SendMessageW(kids[i], WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+        /* 说明 STATIC 与快捷键标签 */
+        for (int cid = SID_HELP1; cid <= SID_HELP3; cid++) {
+            HWND h = GetDlgItem(g_st.hwnd, cid);
+            if (h) SendMessageW(h, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+        }
     }
 
     ShowWindow(g_st.hwnd, SW_SHOW);
