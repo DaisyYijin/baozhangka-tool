@@ -14,7 +14,7 @@
 
 static const wchar_t SET_DLG_CLASS[] = L"AcSettingsDlg";
 #define SET_W 400
-#define SET_H 360
+#define SET_H 420
 
 #define SID_OK      1
 #define SID_CANCEL  2
@@ -142,7 +142,7 @@ static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         SetTextColor(dc, RGB(0x2E,0x2E,0x2E));
         TextOutW(dc, 16, 138, L"\x5168\x5C40\x5FEB\x6377\x952E", 5);
         /* ---- 标题:更多设置 ---- */
-        TextOutW(dc, 16, 266, L"\x66F4\x591A\x8BBE\x7F6E\xFF08\x9884\x7559\xFF09", 8);
+        TextOutW(dc, 16, 294, L"\x66F4\x591A\x8BBE\x7F6E\xFF08\x9884\x7559\xFF09", 8);
         SelectObject(dc, of);
 
         EndPaint(hwnd, &ps);
@@ -256,29 +256,29 @@ int settings_dialog(HWND owner)
             SendMessageW(*hkHwnds[r], CB_SETCURSEL, hkRows[r].defIdx, 0);
     }
 
-    /* --- 说明文字(STATIC ×3:快捷键说明两行+预留区一行;高 22 防上下裁剪) --- */
+    /* --- 说明文字(STATIC ×3:快捷键说明两行+预留区一行;高 22 防裁剪,行距 24 与后续区不叠) --- */
     CreateWindowExW(0, L"STATIC",
         L"\x5F00\x59CB=\x542F\x52A8\x4EFB\x52A1\x20\x20\x6682\x505C=\x6682\x505C/\x7EE7\x7EED\x20\x20\x505C\x6B62=Ctrl+\x6240\x9009\x952E",   /* 开始=启动任务  暂停=暂停/继续  停止=Ctrl+所选键 */
-        WS_CHILD | WS_VISIBLE, 20, 231, 364, 22,
+        WS_CHILD | WS_VISIBLE, 20, 240, 364, 22,
         g_st.hwnd, (HMENU)SID_HELP1, wc.hInstance, NULL);
     CreateWindowExW(0, L"STATIC",
         L"\x4FEE\x6539\x540E\x70B9\x300C\x786E\x5B9A\x300D\x7ACB\x5373\x751F\x6548\xFF0C\x65E0\x9700\x91CD\x542F",   /* 修改后点「确定」立即生效,无需重启 */
-        WS_CHILD | WS_VISIBLE, 20, 251, 364, 22,
+        WS_CHILD | WS_VISIBLE, 20, 264, 364, 22,
         g_st.hwnd, (HMENU)SID_HELP2, wc.hInstance, NULL);
     CreateWindowExW(0, L"STATIC",
         L"\x540E\x7EED\x7248\x672C\x5C06\x5728\x6B64\x589E\x52A0\x66F4\x591A\x914D\x7F6E\x9879",   /* 后续版本将在此增加更多配置项 */
-        WS_CHILD | WS_VISIBLE, 16, 285, 340, 22,
+        WS_CHILD | WS_VISIBLE, 16, 316, 340, 22,
         g_st.hwnd, (HMENU)SID_HELP3, wc.hInstance, NULL);
 
     /* --- 底部按钮 --- */
     g_st.ok = CreateWindowExW(0, L"BUTTON",
         L"\x786E\x5B9A",
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        SET_W - 190, SET_H - 62, 80, 30, g_st.hwnd, (HMENU)SID_OK, wc.hInstance, NULL);
+        SET_W - 190, SET_H - 72, 80, 30, g_st.hwnd, (HMENU)SID_OK, wc.hInstance, NULL);
     g_st.cancel = CreateWindowExW(0, L"BUTTON",
         L"\x53D6\x6D88",
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-        SET_W - 100, SET_H - 62, 80, 30, g_st.hwnd, (HMENU)SID_CANCEL, wc.hInstance, NULL);
+        SET_W - 100, SET_H - 72, 80, 30, g_st.hwnd, (HMENU)SID_CANCEL, wc.hInstance, NULL);
 
     if (g_uiFont) {
         HWND kids[] = { g_st.hkFloat, g_st.hkPause, g_st.hkStop,
