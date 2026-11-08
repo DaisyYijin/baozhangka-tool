@@ -945,12 +945,14 @@ static void ex_on_dnd(XuiWin *w, const char *path, void *ud)
     }
     int wx = 0, wy = 0;
     xui_pointer_pos(g_ex.dlg, &wx, &wy);   /* 指针窗口内坐标:上半=表A,下半=表B */
-    if (wy < 130) {
+    if (wy < 123) {          /* 分界 123:A 槽底(~106)与 B 标题(140)空隙中点 */
         snprintf(g_ex.pathA, sizeof(g_ex.pathA), "%s", path);
         xui_set_text(g_ex.lbA, strrchr(path, '/') ? strrchr(path, '/') + 1 : path);
+        set_status("\xe5\xb7\xb2\xe9\x80\x89\xe8\xa1\xa8A: %s", path);     /* 已选表A: 路径 */
     } else {
         snprintf(g_ex.pathB, sizeof(g_ex.pathB), "%s", path);
         xui_set_text(g_ex.lbB, strrchr(path, '/') ? strrchr(path, '/') + 1 : path);
+        set_status("\xe5\xb7\xb2\xe9\x80\x89\xe8\xa1\xa8B: %s", path);     /* 已选表B: 路径 */
     }
 }
 

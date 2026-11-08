@@ -1972,6 +1972,14 @@ static int do_extract_core(const wchar_t *pa, const wchar_t *pb, HWND owner)
     return done;
 }
 
+/* 扩展名校验(xlsx/csv/txt) */
+static int ex_valid_ext(const wchar_t *p)
+{
+    const wchar_t *dot = wcsrchr(p, L'.');
+    return dot && (_wcsicmp(dot, L".xlsx") == 0 || _wcsicmp(dot, L".csv") == 0 ||
+                   _wcsicmp(dot, L".txt") == 0);
+}
+
 /* 槽绘制:虚线框+两行文字(提示/已选文件名) */
 static void ex_draw_slot(HDC dc, int y, const wchar_t *title, const wchar_t *path)
 {
@@ -2033,27 +2041,43 @@ static LRESULT CALLBACK ex_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_DROPFILES: {
-        wchar_t dpath[MAX_PATH] = L"";
+        HDROP h = (HDROP)wp;
         POINT pt;
-        if (DragQueryFileW((HDROP)wp, 0, dpath, MAX_PATH) > 0 &&
-            DragQueryPoint((HDROP)wp, &pt)) {
-            const wchar_t *dot = wcsrchr(dpath, L'.');
-            if (dot && (_wcsicmp(dot, L".xlsx") == 0 || _wcsicmp(dot, L".csv") == 0 ||
-                        _wcsicmp(dot, L".txt") == 0)) {
-                int slotB = (pt.y >= EX_SLOT_B_Y && pt.y < EX_SLOT_B_Y + EX_SLOT_H);
-                if (pt.y >= EX_SLOT_A_Y && pt.y < EX_SLOT_A_Y + EX_SLOT_H)
-                    wcscpy(g_ex.pathA, dpath);
-                else if (slotB)
-                    wcscpy(g_ex.pathB, dpath);
-                else
-                    MessageBoxW(hwnd, L"请把文件拖到「表A」或「表B」框内。",
-                                L"提示", MB_ICONINFORMATION);
+        UINT n = DragQueryFileW(h, 0xFFFFFFFF, NULL, 0);
+        DragQueryPoint(h, &pt);
+        if (n >= 2 && !g_ex.pathA[0] && !g_ex.pathB[0]) {
+            /* 一次拖入多个文件且两槽都空:第1个→表A,第2个→表B */
+            wchar_t f0[MAX_PATH] = L"", f1[MAX_PATH] = L"";
+            DragQueryFileW(h, 0, f0, MAX_PATH);
+            DragQueryFileW(h, 1, f1, MAX_PATH);
+            if (ex_valid_ext(f0) && ex_valid_ext(f1)) {
+                wcscpy(g_ex.pathA, f0);
+                wcscpy(g_ex.pathB, f1);
+                MessageBoxW(hwnd,
+                    L"已自动分配:\n第 1 个文件 → 表A,第 2 个文件 → 表B。",
+                    L"数据提取", MB_ICONINFORMATION);
             } else {
                 MessageBoxW(hwnd, L"仅支持拖入 .xlsx / .csv / .txt 文件。",
                             L"提示", MB_ICONINFORMATION);
             }
+        } else {
+            wchar_t dpath[MAX_PATH] = L"";
+            if (DragQueryFileW(h, 0, dpath, MAX_PATH) > 0) {
+                if (ex_valid_ext(dpath)) {
+                    if (pt.y >= EX_SLOT_A_Y && pt.y < EX_SLOT_A_Y + EX_SLOT_H)
+                        wcscpy(g_ex.pathA, dpath);
+                    else if (pt.y >= EX_SLOT_B_Y && pt.y < EX_SLOT_B_Y + EX_SLOT_H)
+                        wcscpy(g_ex.pathB, dpath);
+                    else
+                        MessageBoxW(hwnd, L"请把文件拖到「表A」或「表B」框内。",
+                                    L"提示", MB_ICONINFORMATION);
+                } else {
+                    MessageBoxW(hwnd, L"仅支持拖入 .xlsx / .csv / .txt 文件。",
+                                L"提示", MB_ICONINFORMATION);
+                }
+            }
         }
-        DragFinish((HDROP)wp);
+        DragFinish(h);
         InvalidateRect(hwnd, NULL, FALSE);
         return 0;
     }
@@ -2124,13 +2148,13 @@ static void on_extract(void)
     g_ex.hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME, L"AcExtractDlg",
         L"数据提取(拖入表A与表B)",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        cx, cy, 420, 300, g_hMain, NULL, GetModuleHandleW(NULL), NULL);
+        cx, cy, 420, 334, g_hMain, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_ex.hwnd) return;
     g_ex.btnGo = CreateWindowExW(0, L"BUTTON", L"开始提取",
-        WS_CHILD | WS_VISIBLE, 200, 246, 90, 30,
+        WS_CHILD | WS_VISIBLE, 200, 254, 90, 30,
         g_ex.hwnd, (HMENU)1, NULL, NULL);
     g_ex.btnClose = CreateWindowExW(0, L"BUTTON", L"关闭",
-        WS_CHILD | WS_VISIBLE, 302, 246, 70, 30,
+        WS_CHILD | WS_VISIBLE, 302, 254, 70, 30,
         g_ex.hwnd, (HMENU)2, NULL, NULL);
     if (g_uiFont) {
         SendMessageW(g_ex.btnGo, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
@@ -2146,6 +2170,10 @@ static void on_extract(void)
     while (!g_ex.done) {
         if (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) break;
+            if (msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN) {
+                PostMessageW(g_ex.hwnd, WM_COMMAND, MAKEWPARAM(1, 0), 0);
+                continue;
+            }
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         } else {
