@@ -7,7 +7,12 @@
 #include "../src/core/import.h"
 #include "../src/core/u8.h"
 
-extern char *win_gbk_to_utf8(const char *raw, size_t n);  /* stub/platform_win */
+#ifdef _WIN32
+extern char *win_gbk_to_utf8(const char *raw, size_t n);  /* platform_win */
+#define XL_GBK win_gbk_to_utf8
+#else
+#define XL_GBK NULL          /* Linux 无 GBK 降级(8-bit 串走 Latin1) */
+#endif
 
 static int fails = 0;
 #define CHECK(cond, msg) do { if (!(cond)) { printf("FAIL: %s\n", msg); fails++; } } while (0)
@@ -31,7 +36,7 @@ int main(void)
 
     Sheet s;
     memset(&s, 0, sizeof(s));
-    int r = xls_parse(d, len, win_gbk_to_utf8, &s);
+    int r = xls_parse(d, len, XL_GBK, &s);
     printf("parse=%d rows=%d cols=%d\n", r, s.rows, s.cols);
     CHECK(r == 0, "xls_parse 应成功(0)");
     if (r != 0) { free(d); printf("*** 失败 ***(%d 处)\n", fails); return 1; }
@@ -55,7 +60,7 @@ int main(void)
     /* sheet_parse_auto 应把 OLE2 头判到 xls 分支 */
     Sheet s2;
     memset(&s2, 0, sizeof(s2));
-    int r2 = sheet_parse_auto(d, len, win_gbk_to_utf8, &s2);
+    int r2 = sheet_parse_auto(d, len, XL_GBK, &s2);
     CHECK(r2 == 0 && s2.rows == 11 && s2.cols == 5, "auto 判型走 xls 分支");
 
     /* .xlsx/.csv 不受影响(PK 头仍走 xlsx) */
@@ -64,7 +69,7 @@ int main(void)
     if (d2) {
         Sheet s3;
         memset(&s3, 0, sizeof(s3));
-        CHECK(sheet_parse_auto(d2, len2, win_gbk_to_utf8, &s3) == 0 &&
+        CHECK(sheet_parse_auto(d2, len2, XL_GBK, &s3) == 0 &&
               s3.rows == 11, "auto 对 xlsx 仍走 xlsx 分支");
         sheet_free(&s3);
         free(d2);
