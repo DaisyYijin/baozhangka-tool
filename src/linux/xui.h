@@ -46,6 +46,7 @@ void    xui_window_move(XuiWin *w, int x, int y);    /* 移动到屏幕坐标 */
 void    xui_window_pos(XuiWin *w, int *x, int *y);   /* 取屏幕坐标 */
 void    xui_window_hide(XuiWin *w);                  /* 隐藏(Unmap) */
 void    xui_window_dnd(XuiWin *w, XuiDndFn cb, void *ud);  /* 启用 XDND 文件拖入接收 */
+void    xui_pointer_pos(XuiWin *w, int *x, int *y);        /* 指针在窗口内坐标 */
 
 /* ---- 控件(父窗口内绝对布局,坐标含边框) ---- */
 XuiWgt *xui_label (XuiWin *p, int x,int y,int w,int h, const char *utf8);

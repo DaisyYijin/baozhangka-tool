@@ -943,9 +943,9 @@ static void ex_on_dnd(XuiWin *w, const char *path, void *ud)
         show_info("\xe4\xbb\x85\xe6\x94\xaf\xe6\x8c\x81 .xlsx / .csv / .txt \xe6\x96\x87\xe4\xbb\xb6");  /* 仅支持 .xlsx/.csv/.txt 文件 */
         return;
     }
-    Window rr, cr; int rx, ry, wx, wy; unsigned mask;
-    XQueryPointer(g_ui->dpy, g_ex.dlg->win, &rr, &cr, &rx, &ry, &wx, &wy, &mask);
-    if (wy < 130) {                    /* 上半=表A,下半=表B */
+    int wx = 0, wy = 0;
+    xui_pointer_pos(g_ex.dlg, &wx, &wy);   /* 指针窗口内坐标:上半=表A,下半=表B */
+    if (wy < 130) {
         snprintf(g_ex.pathA, sizeof(g_ex.pathA), "%s", path);
         xui_set_text(g_ex.lbA, strrchr(path, '/') ? strrchr(path, '/') + 1 : path);
     } else {

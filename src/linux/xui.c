@@ -226,6 +226,8 @@ static void clip_send_notify(XUi *ui, const XSelectionRequestEvent *req, Atom pr
     XSendEvent(ui->dpy, req->requestor, False, 0, &resp);
 }
 
+static void dnd_on_notify(XUi *ui, XSelectionEvent *se);   /* 前向:定义在 XDND 段 */
+
 static void clip_on_request(XUi *ui, const XSelectionRequestEvent *req)
 {
     Display *d = ui->dpy;
@@ -1327,6 +1329,17 @@ void xui_window_hide(XuiWin *w)
 }
 
 /* ===================== XDND 拖放接收(协议 v5 简化实现) ===================== */
+
+/* 指针在窗口内的坐标(拖放分槽判定用) */
+void xui_pointer_pos(XuiWin *w, int *x, int *y)
+{
+    Window rr, cr;
+    int rx, ry, wx, wy;
+    unsigned m;
+    XQueryPointer(w->ui->dpy, w->win, &rr, &cr, &rx, &ry, &wx, &wy, &m);
+    if (x) *x = wx;
+    if (y) *y = wy;
+}
 
 /* "file:///a%20b" → "/a b"(原地百分号解码) */
 static char *dnd_uri_decode(char *s)
