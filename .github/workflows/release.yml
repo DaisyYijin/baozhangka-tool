@@ -55,12 +55,17 @@ jobs:
             if gcc -std=gnu99 -O1 -g -fsanitize=address -Isrc/core "$t" \
                 src/core/u8.c src/core/inflate.c src/core/zip.c src/core/sheet.c \
                 src/core/engine.c src/core/ac_keys.c src/core/import.c src/core/findimg.c \
-                -o "/tmp/$name.asan" 2> "/tmp/$name.asan.err" \
-               && ASAN_OPTIONS=detect_leaks=0 "/tmp/$name.asan" > "/tmp/$name.asan.out" 2>&1; then
-              echo "ASAN PASS $name"
+                -o "/tmp/$name.asan" 2> "/tmp/$name.asan.err"; then
+              if ASAN_OPTIONS=detect_leaks=0 "/tmp/$name.asan" > "/tmp/$name.asan.out" 2>&1; then
+                echo "ASAN PASS $name"
+              else
+                echo "ASAN RUN FAIL $name (exit=$?)"
+                cat -v "/tmp/$name.asan.out" 2>/dev/null || true
+                fail=1
+              fi
             else
-              echo "ASAN FAIL $name"
-              tail -25 "/tmp/$name.asan.err" "/tmp/$name.asan.out" 2>/dev/null || true
+              echo "ASAN BUILD FAIL $name"
+              cat -v "/tmp/$name.asan.err" 2>/dev/null || true
               fail=1
             fi
           done
