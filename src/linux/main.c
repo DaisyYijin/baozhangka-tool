@@ -545,10 +545,10 @@ static void edit_on_ok(XuiWgt *w, void *ud)
     s->count = atoi(xui_entry_text(eb->count));
     s->interval = atoi(xui_entry_text(eb->interval));
     if (s->type == ACT_FINDIMG) {       /* 动作/容差从下拉取(数字输入已废弃) */
-        int ai = xui_combo_active(eb.actCombo);
+        int ai = xui_combo_active(eb->actCombo);
         s->count = (ai >= 0 && ai <= 3) ? ai : 1;
         static const int tv[5] = { 0, 10, 20, 40, 80 };
-        int ti = xui_combo_active(eb.tolCombo);
+        int ti = xui_combo_active(eb->tolCombo);
         s->interval = 0;
         s->ifTol = (ti >= 0 && ti < 5) ? tv[ti] : 20;
     }
