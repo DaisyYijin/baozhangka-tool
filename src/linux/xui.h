@@ -58,6 +58,9 @@ void xui_list_set(XuiWgt *l, int row, int col, const char *utf8);
 void xui_list_set_header(XuiWgt *l, int col, const char *utf8);
 int  xui_list_sel(XuiWgt *l);
 void xui_list_sel_set(XuiWgt *l, int row);
+/* 勾选模式:行首画勾选框,点击行首切换(用于多选批量操作);行数变化勾选清零 */
+void xui_list_enable_check(XuiWgt *l, int on);
+int  xui_list_checked(XuiWgt *l, int row);
 
 /* ---- 通用 ---- */
 void xui_set_text(XuiWgt *w, const char *utf8);   /* label/entry/statusbar */

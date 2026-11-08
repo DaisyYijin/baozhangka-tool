@@ -27,6 +27,8 @@ void task_init(Task *t);
 void task_free(Task *t);
 int  task_add(Task *t, const Step *s);        /* 返回新步骤索引,-1 失败 */
 void task_remove(Task *t, int index);
+/* 按索引集合批量删除步骤(保持剩余顺序,索引无需有序);返回实际删除数 */
+int task_remove_multi(Task *t, const int *indices, int n);
 void task_move(Task *t, int index, int delta); /* delta 上移/下移 */
 void task_move_to(Task *t, int src, int dst);  /* 移到插入位 dst(0..count,列表拖拽用) */
 void task_clear(Task *t);

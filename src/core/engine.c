@@ -136,6 +136,27 @@ void task_remove(Task *t, int index)
     t->count--;
 }
 
+int task_remove_multi(Task *t, const int *indices, int n)
+{
+    if (!t || !indices || n <= 0 || t->count <= 0) return 0;
+    int removed = 0, w = 0;
+    for (int i = 0; i < t->count; i++) {
+        int drop = 0;
+        for (int k = 0; k < n; k++)
+            if (indices[k] == i) { drop = 1; break; }
+        if (drop) {                     /* 与 task_remove 相同的释放语义 */
+            free(t->steps[i].imgB64);
+            t->steps[i].imgB64 = NULL;
+            removed++;
+        } else {
+            if (w != i) t->steps[w] = t->steps[i];   /* 浅拷贝(堆指针随迁) */
+            w++;
+        }
+    }
+    t->count = w;
+    return removed;
+}
+
 void task_move(Task *t, int index, int delta)
 {
     int j = index + delta;

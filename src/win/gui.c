@@ -1702,6 +1702,26 @@ static void edit_step(void)
 
 static void del_step(void)
 {
+    /* 勾选框≥1 → 批量删除勾选的多个步骤;否则按当前单选删除(保持原行为) */
+    int n = g_task.count;
+    if (n > 0) {
+        int *idx = (int *)malloc((size_t)n * sizeof(int));
+        if (idx) {
+            int k = 0;
+            for (int i = 0; i < n; i++)
+                if (ListView_GetCheckState(g_hList, i)) idx[k++] = i;
+            if (k > 0) {
+                int removed = task_remove_multi(&g_task, idx, k);
+                wchar_t m[64];
+                swprintf(m, 64, L"已删除 %d 个选中步骤。", removed);
+                log_add(m);
+                refresh_list();
+                free(idx);
+                return;
+            }
+            free(idx);
+        }
+    }
     int i = selected_index();
     if (i < 0) return;
     task_remove(&g_task, i);
@@ -2227,13 +2247,14 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         /* ---- 步骤列表 ---- */
         g_hList = CreateWindowExW(0, WC_LISTVIEWW, L"",
                                   WS_CHILD | WS_VISIBLE | LVS_REPORT |
-                                  LVS_SHOWSELALWAYS | LVS_SINGLESEL,
+                                  LVS_SHOWSELALWAYS,
                                   0, 0, 800, 300,
                                   hwnd, (HMENU)(INT_PTR)IDC_LIST,
                                   GetModuleHandleW(NULL), NULL);
         SendMessageW(g_hList, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
         ListView_SetExtendedListViewStyle(g_hList,
-            LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
+            LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER |
+            LVS_EX_CHECKBOXES);            /* 行首勾选框:多选选区(批量删除用) */
 
         struct { const wchar_t *name; int w; } cols[] = {
             { L"⠿", 30 },    { L"序号", 52 }, { L"类型", 78 }, { L"坐标", 130 },

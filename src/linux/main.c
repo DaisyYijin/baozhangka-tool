@@ -843,6 +843,18 @@ static void on_list_activate(XuiWgt *l, int row, void *ud)
 static void on_del(XuiWgt *btn, void *data)
 {
     (void)btn; (void)data;
+    /* 勾选≥1 → 批量删除勾选步骤;否则按单选删除(保持原行为) */
+    {
+        int n = g_task.count, k = 0;
+        int idx[512];
+        for (int i = 0; i < n && k < 512; i++)
+            if (xui_list_checked(g_list, i)) idx[k++] = i;
+        if (k > 0) {
+            task_remove_multi(&g_task, idx, k);
+            refresh_list();
+            return;
+        }
+    }
     int i = selected_index();
     if (i >= 0) { task_remove(&g_task, i); refresh_list(); }
 }
@@ -955,6 +967,7 @@ int main(int argc, char **argv)
     /* 列表 */
     static const int cols[7] = { 52, 96, 150, 96, 300, 120, 86 };
     g_list = xui_list_new(g_win, 10, 82, 1000, 520, 7, cols);
+    xui_list_enable_check(g_list, 1);   /* 行首勾选框:多选批量删除 */
     xui_list_set_header(g_list, 0, "\xe5\xba\x8f\xe5\x8f\xb7");
     xui_list_set_header(g_list, 1, "\xe7\xb1\xbb\xe5\x9e\x8b");
     xui_list_set_header(g_list, 2, "\xe5\x9d\x90\xe6\xa0\x87");

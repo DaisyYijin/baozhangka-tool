@@ -57,7 +57,8 @@ struct XuiWgt {
     int rows, cols, *colW;
     char **hdr;                 /* 每列表头文字 */
     char ***cells;
-    int sel, top, dragBar;
+    int sel, top, dragBar, checkMode;
+    unsigned char *checked;           /* 勾选状态(行数变化时重建清零) */
     int lastClickRow; Time lastClickTime;
     XuiListFn onSel, onAct; void *lud;
     /* button */
@@ -409,7 +410,7 @@ static void draw_wgt(XUi *ui, XuiWgt *g)
         int barX = g->w - 12;
         int bodyW = needBar ? g->w - 12 : g->w;
         /* 表头 */
-        int cx2 = 0;
+        int cx2 = g->checkMode ? 20 : 0;   /* 勾选模式:行首留 20px 勾选框区 */
         for (int c = 0; c < g->cols; c++) {
             int cwd = needBar && c == g->cols - 1 ? g->colW[c] - 12 : g->colW[c];
             XSetForeground(d, ui->gc, ui->cFace);
@@ -434,7 +435,16 @@ static void draw_wgt(XUi *ui, XuiWgt *g)
                 XSetForeground(d, ui->gc, ui->cSel);
                 XFillRectangle(d, w, ui->gc, 0, yy, bodyW, rowH);
             }
-            cx2 = 0;
+            cx2 = g->checkMode ? 20 : 0;
+            if (g->checkMode) {        /* 行首勾选框 */
+                int bx = 4, by = yy + (rowH - 12) / 2;
+                XSetForeground(d, ui->gc, ui->cBlack);
+                XDrawRectangle(d, w, ui->gc, bx, by, 12, 12);
+                if (g->checked && g->checked[row]) {
+                    XDrawLine(d, w, ui->gc, bx + 2, by + 6, bx + 5, by + 9);
+                    XDrawLine(d, w, ui->gc, bx + 5, by + 9, bx + 10, by + 2);
+                }
+            }
             for (int c = 0; c < g->cols; c++) {
                 const char *txt = g->cells[row][c];
                 if (txt && txt[0]) {
@@ -590,6 +600,8 @@ static void list_free_cells(XuiWgt *l)
 void xui_list_set_rows(XuiWgt *l, int nRows)
 {
     list_free_cells(l);
+    free(l->checked);                 /* 数据重建:勾选清零 */
+    l->checked = nRows > 0 ? (unsigned char *)calloc((size_t)nRows, 1) : NULL;
     if (nRows > 0) {
         l->cells = (char ***)calloc((size_t)nRows, sizeof(char **));
         for (int r = 0; r < nRows; r++) {
@@ -605,6 +617,20 @@ void xui_list_set(XuiWgt *l, int row, int col, const char *utf8)
     if (row < 0 || row >= l->rows || col < 0 || col >= l->cols) return;
     free(l->cells[row][col]);
     l->cells[row][col] = utf8 ? strdup(utf8) : strdup("");
+}
+
+void xui_list_enable_check(XuiWgt *l, int on)
+{
+    if (l && l->type == XUI_LIST) {
+        l->checkMode = on;
+        wgt_redraw(l);
+    }
+}
+
+int xui_list_checked(XuiWgt *l, int row)
+{
+    return (l && l->type == XUI_LIST && l->checked &&
+            row >= 0 && row < l->rows) ? l->checked[row] : 0;
 }
 void xui_list_set_header(XuiWgt *l, int col, const char *utf8)
 {
@@ -1008,6 +1034,11 @@ static void on_button(XUi *ui, XEvent *ev)
         }
         int row = (y - rowH) / rowH + g->top;
         if (row >= 0 && row < g->rows && y >= rowH) {
+            if (g->checkMode && x >= 0 && x < 20) {   /* 点勾选框=切换选区 */
+                if (g->checked) g->checked[row] = !g->checked[row];
+                wgt_redraw(g);
+                return;
+            }
             int dbl = (row == g->lastClickRow &&
                        ev->xbutton.time - g->lastClickTime < 400);
             g->lastClickRow = row; g->lastClickTime = ev->xbutton.time;
