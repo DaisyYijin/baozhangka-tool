@@ -1,4 +1,4 @@
-/* test_xlsx_sheet.c - 验证多工作表枚举/按索引解析(用 examples/示例数据.xlsx) */
+/* test_xlsx_sheet.c - 验证工作表枚举/按索引解析(用 examples/示例数据.xlsx,单表 10 人) */
 #include <stdio.h>
 #include <wchar.h>
 #include <stdlib.h>
@@ -24,44 +24,41 @@ int main(void)
     unsigned char *data = read_file_all(L"examples/示例数据.xlsx", &len);
     if (!data) { printf("FAIL: read\n"); return 1; }
 
-    /* 1) 枚举工作表 */
+    /* 1) 枚举工作表(单表:Sheet1) */
     char names[16][48];
     int n = xlsx_list_sheets(data, len, names, 16);
     printf("sheets=%d\n", n);
     for (int i = 0; i < n && i < 4; i++) printf("  [%d] %s\n", i, names[i]);
-    CHECK(n == 2, "应有 2 个工作表");
-    if (n >= 2) {
-        CHECK(strcmp(names[0], "人员名单") == 0, "工作表0名字");
-        CHECK(strcmp(names[1], "登录账号") == 0, "工作表1名字");
-    }
+    CHECK(n == 1, "应有 1 个工作表");
+    if (n >= 1)
+        CHECK(strcmp(names[0], "Sheet1") == 0, "工作表0名字应为 Sheet1");
 
-    /* 2) 解析第 2 个工作表(登录账号) */
+    /* 2) 解析第 1 个工作表:表头+10 人(姓名/性别/证件号,男女交替) */
     Sheet sh;
     memset(&sh, 0, sizeof(sh));
-    int r = xlsx_parse_sheet(data, len, 1, &sh);
-    CHECK(r == 0, "parse sheet1 失败");
+    int r = xlsx_parse_sheet(data, len, 0, &sh);
+    CHECK(r == 0, "parse sheet0 失败");
+    CHECK(sh.rows == 11, "应 11 行(表头+10 人)");
+    CHECK(sh.cols == 3, "应 3 列");
     char buf[96];
     cell_s(&sh, 0, 0, buf, sizeof(buf));
-    CHECK(strcmp(buf, "账号") == 0, "sheet1(0,0)应为表头'账号'");
+    CHECK(strcmp(buf, "姓名") == 0, "表头(0,0)应为'姓名'");
+    cell_s(&sh, 0, 2, buf, sizeof(buf));
+    CHECK(strcmp(buf, "证件号") == 0, "表头(0,2)应为'证件号'");
     cell_s(&sh, 1, 0, buf, sizeof(buf));
-    CHECK(strcmp(buf, "user01") == 0, "sheet1(1,0)");
-    cell_s(&sh, 2, 2, buf, sizeof(buf));
-    CHECK(strcmp(buf, "报表系统") == 0, "sheet1(2,2)");
-    printf("登录账号表 %d 行 x %d 列\n", sh.rows, sh.cols);
+    CHECK(strcmp(buf, "张三") == 0, "(1,0)应为张三");
+    cell_s(&sh, 1, 1, buf, sizeof(buf));
+    CHECK(strcmp(buf, "男") == 0, "(1,1)应为男");
+    cell_s(&sh, 1, 2, buf, sizeof(buf));
+    CHECK(strcmp(buf, "110101199001011000") == 0, "(1,2)证件号");
+    cell_s(&sh, 10, 0, buf, sizeof(buf));
+    CHECK(strcmp(buf, "钱二") == 0, "(10,0)应为钱二(第10人)");
+    cell_s(&sh, 10, 1, buf, sizeof(buf));
+    CHECK(strcmp(buf, "女") == 0, "(10,1)应为女(交替)");
+    printf("Sheet1 %d 行 x %d 列\n", sh.rows, sh.cols);
     sheet_free(&sh);
 
-    /* 3) 解析第 1 个工作表(人员名单):验证表头跳过的数据基础 */
-    memset(&sh, 0, sizeof(sh));
-    r = xlsx_parse_sheet(data, len, 0, &sh);
-    CHECK(r == 0, "parse sheet0 失败");
-    CHECK(sh.rows == 6, "人员名单应 6 行(含表头)");
-    cell_s(&sh, 0, 1, buf, sizeof(buf));
-    CHECK(strcmp(buf, "身份证号") == 0, "sheet0(0,1)");
-    cell_s(&sh, 5, 0, buf, sizeof(buf));
-    CHECK(strcmp(buf, "钱七") == 0, "sheet0(5,0)");
-    sheet_free(&sh);
-
-    /* 4) 越界索引:回退第一个 */
+    /* 3) 越界索引:回退第一个 */
     memset(&sh, 0, sizeof(sh));
     r = xlsx_parse_sheet(data, len, 99, &sh);
     CHECK(r == 0, "越界索引应回退并成功");
@@ -69,7 +66,7 @@ int main(void)
     CHECK(strcmp(buf, "姓名") == 0, "越界回退到第一个工作表");
     sheet_free(&sh);
 
-    /* 5) 非 xlsx 数据 */
+    /* 4) 非 xlsx 数据 */
     CHECK(xlsx_list_sheets((const uint8_t *)"abcd", 4, names, 16) == -1, "非xlsx应返回-1");
 
     free(data);
