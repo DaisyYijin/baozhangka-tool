@@ -493,15 +493,11 @@ continue_loop:
                 }
                 if (found) {
                     p->mouse_move(fx, fy);
-                    if (s->count >= 1) {
-                        esleep(p, 50);
+                    /* 找到后动作:连击 count 次(1=单击 2=双击 3=三击);0=只定位 */
+                    for (int k = 0; k < s->count; k++) {
+                        esleep(p, k == 0 ? 50 : 60);
                         p->mouse_down(BTN_LEFT);
                         p->mouse_up(BTN_LEFT);
-                        if (s->count >= 2) {
-                            esleep(p, 60);
-                            p->mouse_down(BTN_LEFT);
-                            p->mouse_up(BTN_LEFT);
-                        }
                     }
                     if (s->jumpTo >= 1) {
                         if (++jumps > 10000) return ENGINE_DONE;

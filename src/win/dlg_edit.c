@@ -37,6 +37,7 @@ enum {
     IDC_LB_TPL = 140, IDC_PICKTPL, IDC_TPLINFO, IDC_LB_MISSJUMP, IDC_MISSJUMP,
     IDC_TYPEHELP = 148,               /* 底部:按类型的通俗填写说明(灰字多行) */
     IDC_PICKREGION,                   /* 找图:框选搜索区域(局域识图) */
+    IDC_ACTCOMBO = 150, IDC_TOLCOMBO, /* 找图:动作下拉(点击方式)/容差下拉(档位) */
     IDC_IMPSHEET = 146, IDC_IMPCOL,
 };
 
@@ -213,10 +214,10 @@ static const wchar_t *const TYPE_HELP[ACT_TYPE_COUNT_] = {
     L"取点时拖动框选识别区域;「关键词」命中时跳转——\n"
     L"例如等页面出现「成功」二字再继续往下做。",
     /* ACT_FINDIMG 找图 */
-    L"想找到图片后直接点它:「动作」框(次数位置)填 1=单击图片中心,2=双击,0=只定位不点;\n"
+    L"想找到图片后直接点它:「动作」下拉选 单击它/双击它/三击它(只定位=不点);\n"
     L"先点「≡ 框选模板」在屏幕上拖动框选要查找的图块,执行时自动搜索;\n"
     L"「未找到跳转」常用于先去点开下拉菜单再回来找;\n"
-    L"容差(0-255)越大越宽松,找不到时可调大试试(默认 20);\n"
+    L"容差下拉越宽松越容易匹配上(默认 20,找不到就选 40/80 试试);\n"
     L"搜索范围两种:宽/高填 0 = 全屏(默认);\n"
     L"或点「⊞ 框选区域」拖动圈定范围,区域外的相似图不参与匹配。",
     /* ACT_XLSIF Excel判断 */
@@ -245,6 +246,7 @@ static void layout_rows(int type)
             IDC_LB_NOTE, IDC_NOTE,
             IDC_LB_TPL, IDC_PICKTPL, IDC_TPLINFO, IDC_LB_MISSJUMP, IDC_MISSJUMP,
             IDC_PICKREGION,
+            IDC_ACTCOMBO, IDC_TOLCOMBO,
         };
         for (int i = 0; i < (int)(sizeof(allIds) / sizeof(allIds[0])); i++) {
             HWND h = g_edit.ctl[CTL_ID_OF(allIds[i])];
@@ -393,15 +395,17 @@ static void layout_rows(int type)
         show_ctl(IDC_PICKTPL, 0);
         show_ctl(IDC_TPLINFO, 0);
     }
-    /* 行:找图 找到动作 + 容差(复用 次数=动作 间隔=容差) */
+    /* 行:找图 找到动作 + 容差(均为下拉:动作=点击方式,容差=匹配档位) */
     if (type == ACT_FINDIMG) {
         set_ctl_text(IDC_LB_COUNT, L"动作/容差");
         show_ctl(IDC_LB_COUNT, 1);
-        show_ctl(IDC_COUNT, 1);
-        show_ctl(IDC_INTERVAL, 1);
+        show_ctl(IDC_COUNT, 0);
+        show_ctl(IDC_INTERVAL, 0);
+        show_ctl(IDC_ACTCOMBO, 1);
+        show_ctl(IDC_TOLCOMBO, 1);
         place(IDC_LB_COUNT, LB_X, y + 2, LB_W, 20);
-        place(IDC_COUNT, CT_X, y, 56, 22);
-        place(IDC_INTERVAL, CT_X + 62, y, 56, 22);
+        place(IDC_ACTCOMBO, CT_X, y - 3, 96, 22);
+        place(IDC_TOLCOMBO, CT_X + 102, y - 3, 110, 22);
         y += ROW_H;
     }
     /* 行:判断颜色(仅判断;复用次数=颜色 间隔=容差) */
@@ -683,7 +687,14 @@ static int collect(void)
         if (s->w < 0) s->w = 0;
         if (s->h < 0) s->h = 0;
         s->ifColor = 0;
-        s->ifTol = get_int(IDC_INTERVAL, 20);
+        /* 动作/容差从下拉取(数字输入已废弃) */
+        {
+            int ai = (int)SendMessageW(g_edit.ctl[IDC_ACTCOMBO - 100], CB_GETCURSEL, 0, 0);
+            s->count = (ai >= 0 && ai <= 3) ? ai : 1;
+            static const int tolVals[5] = { 0, 10, 20, 40, 80 };
+            int ti = (int)SendMessageW(g_edit.ctl[IDC_TOLCOMBO - 100], CB_GETCURSEL, 0, 0);
+            s->ifTol = (ti >= 0 && ti < 5) ? tolVals[ti] : 20;
+        }
         s->missJump = get_int(IDC_MISSJUMP, 0);
         free(s->imgB64);
         s->imgB64 = g_edit.tplB64 ? strdup(g_edit.tplB64) : NULL;
@@ -931,6 +942,21 @@ static void build_controls(void)
     g_edit.ctl[IDC_TPLINFO - 100] = mk_ctl(L"STATIC", L"未框选", 0, IDC_TPLINFO, 130, 20);
     g_edit.ctl[IDC_LB_MISSJUMP - 100] = mk_ctl(L"STATIC", L"未找到跳转", SS_RIGHT, IDC_LB_MISSJUMP, LB_W, 20);
     CTL(L"EDIT", L"", WS_BORDER | ES_NUMBER, IDC_MISSJUMP, 56, 22);
+    /* 找图:动作下拉(找到后点击方式) + 容差下拉(档位) */
+    CTL(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, IDC_ACTCOMBO, 96, 130);
+    CTL(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, IDC_TOLCOMBO, 110, 150);
+    {
+        static const wchar_t *acts[4] = {
+            L"只定位(不点)", L"单击它", L"双击它", L"三击它"
+        };
+        for (int i = 0; i < 4; i++)
+            SendMessageW(g_edit.ctl[IDC_ACTCOMBO - 100], CB_ADDSTRING, 0, (LPARAM)acts[i]);
+        static const wchar_t *tols[5] = {
+            L"严格(0)", L"标准(10)", L"默认(20)", L"宽松(40)", L"很宽松(80)"
+        };
+        for (int i = 0; i < 5; i++)
+            SendMessageW(g_edit.ctl[IDC_TOLCOMBO - 100], CB_ADDSTRING, 0, (LPARAM)tols[i]);
+    }
 
     /* 拖动终点行 */
     g_edit.ctl[IDC_LB_XY2 - 100] = mk_ctl(L"STATIC", L"终点 X / Y", SS_RIGHT, IDC_LB_XY2, LB_W, 20);
@@ -1492,8 +1518,19 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
     if (s->type == ACT_FINDIMG) {
         set_int(IDC_W, s->w);
         set_int(IDC_H, s->h);
-        set_int(IDC_COUNT, s->count);
-        set_int(IDC_INTERVAL, s->ifTol > 0 ? s->ifTol : 20);
+        /* 动作/容差:下拉选中(容差取最接近档位) */
+        SendMessageW(g_edit.ctl[IDC_ACTCOMBO - 100], CB_SETCURSEL,
+                     (s->count >= 0 && s->count <= 3) ? s->count : 1, 0);
+        {
+            static const int tolVals[5] = { 0, 10, 20, 40, 80 };
+            int v = s->ifTol > 0 ? s->ifTol : 20;
+            int ti = 2, bestd = 999;
+            for (int k = 0; k < 5; k++) {
+                int d = v > tolVals[k] ? v - tolVals[k] : tolVals[k] - v;
+                if (d < bestd) { bestd = d; ti = k; }
+            }
+            SendMessageW(g_edit.ctl[IDC_TOLCOMBO - 100], CB_SETCURSEL, ti, 0);
+        }
         set_int(IDC_MISSJUMP, s->missJump);
         if (s->imgB64 && s->imgB64[0]) {
             int tw2 = 0, th2 = 0;

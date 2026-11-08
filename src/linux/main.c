@@ -395,6 +395,7 @@ typedef struct {
     XuiWgt *lb_xy, *lb_cnt, *lb_text, *lb_scroll, *lb_xy2, *lb_delay;
     XuiWgt *lb_wh, *w, *h;              /* 找图:搜索区宽高 */
     XuiWgt *btn_tpl, *tplinfo;          /* 找图:框选模板 */
+    XuiWgt *actCombo, *tolCombo;        /* 找图:动作下拉(点击方式)/容差下拉(档位) */
     XuiWgt *lb_miss, *miss;             /* 找图:未找到跳转 */
     char *tplB64;
     int tplW, tplH;
@@ -418,7 +419,7 @@ static const struct { int type; const char *cn; const char *help; } EDIT_TYPES[]
     { ACT_SCROLL,  "\xe6\xbb\x9a\xe8\xbd\xae", "\xe6\xbb\x9a\xe5\x8a\xa8\xe6\xbb\x9a\xe8\xbd\xae:\xe6\xad\xa3\xe6\x95\xb0\xe5\x90\x91\xe4\xb8\x8a,\xe8\xb4\x9f\xe6\x95\xb0\xe5\x90\x91\xe4\xb8\x8b" }, /* 滚动滚轮:正数向上,负数向下 */
     { ACT_DRAG,    "\xe9\xbc\xa0\xe6\xa0\x87\xe6\x8b\x96\xe5\x8a\xa8", "\xe4\xbb\x8e\xe8\xb5\xb7\xe7\x82\xb9\xe6\x8b\x96\xe5\x88\xb0\xe7\xbb\x88\xe7\x82\xb9\xe5\x86\x8d\xe6\x9d\xbe\xe5\xbc\x80" }, /* 从起点拖到终点再松开 */
     { ACT_FINDIMG, "\xe6\x89\xbe\xe5\x9b\xbe",
-      "\xe5\x85\x88\xe6\xa1\x86\xe9\x80\x89\xe6\xa8\xa1\xe6\x9d\xbf\xe5\x9b\xbe,\xe6\x89\xa7\xe8\xa1\x8c\xe6\x97\xb6\xe6\x90\x9c\xe7\xb4\xa2:\xe5\x8a\xa8\xe4\xbd\x9c1=\xe5\x8d\x95\xe5\x87\xbb 2=\xe5\x8f\x8c\xe5\x87\xbb;\xe6\x9c\xaa\xe6\x89\xbe\xe5\x88\xb0\xe5\x8f\xaf\xe8\xb7\xb3\xe8\xbd\xac" }, /* 先框选模板图,执行时搜索:动作1=单击 2=双击;未找到可跳转 */
+      "\xe5\x85\x88\xe6\xa1\x86\xe9\x80\x89\xe6\xa8\xa1\xe6\x9d\xbf\xe5\x9b\xbe,\xe6\x89\xa7\xe8\xa1\x8c\xe6\x97\xb6\xe6\x90\x9c\xe7\xb4\xa2;\xe3\x80\x8c\xe5\x8a\xa8\xe4\xbd\x9c\xe3\x80\x8d\xe4\xb8\x8b\xe6\x8b\x89\xe9\x80\x89 \xe5\x8d\x95\xe5\x87\xbb/\xe5\x8f\x8c\xe5\x87\xbb/\xe4\xb8\x89\xe5\x87\xbb;\xe6\x9c\xaa\xe6\x89\xbe\xe5\x88\xb0\xe5\x8f\xaf\xe8\xb7\xb3\xe8\xbd\xac" }, /* 先框选模板图,执行时搜索;「动作」下拉选 单击/双击/三击;未找到可跳转 */
     { ACT_XLSIF,   "Excel\xe5\x88\xa4\xe6\x96\xad",
       "\xe8\xaf\xbb\xe5\xbd\x93\xe5\x89\x8d\xe8\xa1\x8c\xe6\x8c\x87\xe5\xae\x9a\xe5\x88\x97,\xe4\xbb\xbb\xe6\x84\x8f\xe5\x80\xbc\xe5\xa4\x9a\xe5\x88\x86\xe6\x94\xaf,\xe5\xa6\x82 \xe7\x94\xb7=>2,\xe5\xa5\xb3=>5,9527=>6;\xe4\xb8\x8d\xe5\x8c\xb9\xe9\x85\x8d\xe5\x88\x99\xe7\xbb\xa7\xe7\xbb\xad;\xe5\x80\xbc\xe5\x86\x85\xe4\xb8\x8d\xe8\x83\xbd\xe5\xb8\xa6\xe9\x80\x97\xe5\x8f\xb7;\xe5\x88\x97\xe5\x8f\xb70={\\xe8\\xa1\\x8c}\\xe5\x88\x97" }, /* 读当前行指定列,任意值多分支,如 男=>2,女=>5,9527=>6;不匹配则继续;值内不能带逗号;列号0={行}列 */
 };
@@ -436,9 +437,11 @@ static void edit_apply_type(EditBox *eb)
     xui_show(eb->lb_xy, isClick || scroll || drag || findimg);
     xui_show(eb->x, isClick || scroll || drag || findimg);
     xui_show(eb->y, isClick || scroll || drag || findimg);
-    xui_show(eb->lb_cnt, multi || xlsif);
+    xui_show(eb->lb_cnt, multi || xlsif || findimg);
     xui_show(eb->count, multi || xlsif);
     xui_show(eb->interval, multi);
+    xui_show(eb->actCombo, findimg);
+    xui_show(eb->tolCombo, findimg);
     xui_show(eb->lb_text, text);
     xui_show(eb->text, text);
     if (xlsif)
@@ -541,6 +544,14 @@ static void edit_on_ok(XuiWgt *w, void *ud)
     s->y = atoi(xui_entry_text(eb->y));
     s->count = atoi(xui_entry_text(eb->count));
     s->interval = atoi(xui_entry_text(eb->interval));
+    if (s->type == ACT_FINDIMG) {       /* 动作/容差从下拉取(数字输入已废弃) */
+        int ai = xui_combo_active(eb.actCombo);
+        s->count = (ai >= 0 && ai <= 3) ? ai : 1;
+        static const int tv[5] = { 0, 10, 20, 40, 80 };
+        int ti = xui_combo_active(eb.tolCombo);
+        s->interval = 0;
+        s->ifTol = (ti >= 0 && ti < 5) ? tv[ti] : 20;
+    }
     s->x2 = atoi(xui_entry_text(eb->x2));
     s->y2 = atoi(xui_entry_text(eb->y2));
     s->scroll = atoi(xui_entry_text(eb->scroll));
@@ -656,6 +667,28 @@ static int edit_step_dialog(Step *s, int isNew)
     eb.lb_cnt = xui_label(dlg, L, y + 2, W1, EH, "\xe6\xac\xa1\xe6\x95\xb0 / \xe9\x97\xb4\xe9\x9a\x94(ms):"); /* 次数/间隔 */
     eb.count = xui_entry(dlg, L + W1 + 6, y, 70, EH, cs);
     eb.interval = xui_entry(dlg, L + W1 + 82, y, 70, EH, is);
+    /* 找图:动作下拉(只定位/单击/双击/三击) + 容差下拉(档位),与 count/interval 同排 */
+    eb.actCombo = xui_combo(dlg, L + W1 + 6, y, 96, EH, NULL, NULL);
+    xui_combo_add(eb.actCombo, "\xe5\x8f\xaa\xe5\xae\x9a\xe4\xbd\x8d(\xe4\xb8\x8d\xe7\x82\xb9)"); /* 只定位(不点) */
+    xui_combo_add(eb.actCombo, "\xe5\x8d\x95\xe5\x87\xbb\xe5\xae\x83");                          /* 单击它 */
+    xui_combo_add(eb.actCombo, "\xe5\x8f\x8c\xe5\x87\xbb\xe5\xae\x83");                          /* 双击它 */
+    xui_combo_add(eb.actCombo, "\xe4\xb8\x89\xe5\x87\xbb\xe5\xae\x83");                          /* 三击它 */
+    xui_combo_set_active(eb.actCombo, s->count >= 0 && s->count <= 3 ? s->count : 1);
+    eb.tolCombo = xui_combo(dlg, L + W1 + 112, y, 116, EH, NULL, NULL);
+    xui_combo_add(eb.tolCombo, "\xe4\xb8\xa5\xe6\xa0\xbc(0)");          /* 严格(0) */
+    xui_combo_add(eb.tolCombo, "\xe6\xa0\x87\xe5\x87\x86(10)");         /* 标准(10) */
+    xui_combo_add(eb.tolCombo, "\xe9\xbb\x98\xe8\xae\xa4(20)");         /* 默认(20) */
+    xui_combo_add(eb.tolCombo, "\xe5\xae\xbd\xe6\x9d\xbe(40)");         /* 宽松(40) */
+    xui_combo_add(eb.tolCombo, "\xe5\xbe\x88\xe5\xae\xbd\xe6\x9d\xbe(80)"); /* 很宽松(80) */
+    {
+        static const int tv[5] = { 0, 10, 20, 40, 80 };
+        int v = s->ifTol > 0 ? s->ifTol : 20, ti = 2, bd = 999;
+        for (int k = 0; k < 5; k++) {
+            int d = v > tv[k] ? v - tv[k] : tv[k] - v;
+            if (d < bd) { bd = d; ti = k; }
+        }
+        xui_combo_set_active(eb.tolCombo, ti);
+    }
 
     y += 36;
     eb.lb_text = xui_label(dlg, L, y + 2, W1, EH, "\xe8\xbe\x93\xe5\x85\xa5\xe5\x86\x85\xe5\xae\xb9:");  /* 输入内容: */

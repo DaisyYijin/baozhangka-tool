@@ -244,6 +244,27 @@ int main(void)
         CHECK(g_mvN == 1 && g_dnN == 2 && g_upN == 2, "动作2应双击两次");
         printf("== 引擎链路:动作2双击 OK ==\n");
         task_free(t4);
+
+        /* 动作3 = 三击 */
+        char *packed5 = findimg_pack(0, 0, 0, tpl3, TW3, TH3);
+        TaskBook tb5;
+        memset(&tb5, 0, sizeof(tb5));
+        Task *t5 = &tb5.tasks[0];
+        t5->steps = (Step *)calloc(2, sizeof(Step));
+        t5->cap = 2;
+        Step *fs3 = &t5->steps[t5->count++];
+        memset(fs3, 0, sizeof(Step));
+        fs3->type = ACT_FINDIMG;
+        fs3->x = 100; fs3->y = 50; fs3->w = 200; fs3->h = 100;
+        fs3->count = 3;              /* 找到后三击 */
+        fs3->ifTol = 20;
+        fs3->imgB64 = packed5;
+        t5->loops = 1;
+        g_mvN = g_dnN = g_upN = 0;
+        engine_run(&tb5, 0, &p3, NULL, NULL);
+        CHECK(g_mvN == 1 && g_dnN == 3 && g_upN == 3, "动作3应三击三次");
+        printf("== 引擎链路:动作3三击 OK ==\n");
+        task_free(t5);
     }
 
     printf("\n%s(%d 个失败)\n", fails ? "*** 存在失败 ***" : "全部通过", fails);
