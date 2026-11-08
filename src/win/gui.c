@@ -766,8 +766,15 @@ static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 DeleteObject(brB);
                 DeleteObject(penB);
                 SetTextColor(mem, en ? RGB(255,255,255) : RGB(0xA8,0xA8,0xA8));
-                DrawTextW(mem, btnTxt[i], -1, &rb,
-                          DT_CENTER | DT_VCENTER | DT_WORDBREAK | DT_END_ELLIPSIS);
+                /* DT_WORDBREAK 多行时 DT_VCENTER 无效:先量文字高再手动垂直居中 */
+                RECT rm = rb;
+                DrawTextW(mem, btnTxt[i], -1, &rm, DT_CALCRECT | DT_WORDBREAK);
+                int th = rm.bottom - rm.top;
+                RECT rd = rb;
+                if (th < rb.bottom - rb.top)
+                    rd.top = rb.top + ((rb.bottom - rb.top) - th) / 2;
+                DrawTextW(mem, btnTxt[i], -1, &rd,
+                          DT_CENTER | DT_WORDBREAK | DT_END_ELLIPSIS);
             }
             SelectObject(mem, ofb);
         }
