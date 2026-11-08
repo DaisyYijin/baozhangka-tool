@@ -238,9 +238,11 @@ int settings_dialog(HWND owner)
     HWND *hkHwnds[] = { &g_st.hkFloat, &g_st.hkPause, &g_st.hkStop };
     int *hkVals[]   = { &g_st.hkFloatVk, &g_st.hkPauseVk, &g_st.hkStopVk };
     for (int r = 0; r < 3; r++) {
-        CreateWindowExW(0, L"STATIC", hkRows[r].lbl,
-            WS_CHILD | WS_VISIBLE, 20, 158 + r * 26, 60, 20,
+        HWND lbl = CreateWindowExW(0, L"STATIC", hkRows[r].lbl,
+            WS_CHILD | WS_VISIBLE, 20, 157 + r * 26, 64, 22,
             g_st.hwnd, NULL, wc.hInstance, NULL);
+        if (lbl && g_uiFont)   /* 标签统一雅黑,与下拉/说明/按钮一致 */
+            SendMessageW(lbl, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
         *hkHwnds[r] = CreateWindowExW(0, L"COMBOBOX", L"",
             CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE | WS_VSCROLL,
             88, 155 + r * 26, 110, 250,
@@ -254,18 +256,18 @@ int settings_dialog(HWND owner)
             SendMessageW(*hkHwnds[r], CB_SETCURSEL, hkRows[r].defIdx, 0);
     }
 
-    /* --- 说明文字(STATIC ×3:快捷键说明两行+预留区一行) --- */
+    /* --- 说明文字(STATIC ×3:快捷键说明两行+预留区一行;高 22 防上下裁剪) --- */
     CreateWindowExW(0, L"STATIC",
         L"\x5F00\x59CB=\x542F\x52A8\x4EFB\x52A1\x20\x20\x6682\x505C=\x6682\x505C/\x7EE7\x7EED\x20\x20\x505C\x6B62=Ctrl+\x6240\x9009\x952E",   /* 开始=启动任务  暂停=暂停/继续  停止=Ctrl+所选键 */
-        WS_CHILD | WS_VISIBLE, 20, 232, 364, 18,
+        WS_CHILD | WS_VISIBLE, 20, 231, 364, 22,
         g_st.hwnd, (HMENU)SID_HELP1, wc.hInstance, NULL);
     CreateWindowExW(0, L"STATIC",
         L"\x4FEE\x6539\x540E\x70B9\x300C\x786E\x5B9A\x300D\x7ACB\x5373\x751F\x6548\xFF0C\x65E0\x9700\x91CD\x542F",   /* 修改后点「确定」立即生效,无需重启 */
-        WS_CHILD | WS_VISIBLE, 20, 250, 364, 18,
+        WS_CHILD | WS_VISIBLE, 20, 251, 364, 22,
         g_st.hwnd, (HMENU)SID_HELP2, wc.hInstance, NULL);
     CreateWindowExW(0, L"STATIC",
         L"\x540E\x7EED\x7248\x672C\x5C06\x5728\x6B64\x589E\x52A0\x66F4\x591A\x914D\x7F6E\x9879",   /* 后续版本将在此增加更多配置项 */
-        WS_CHILD | WS_VISIBLE, 16, 286, 340, 18,
+        WS_CHILD | WS_VISIBLE, 16, 285, 340, 22,
         g_st.hwnd, (HMENU)SID_HELP3, wc.hInstance, NULL);
 
     /* --- 底部按钮 --- */
