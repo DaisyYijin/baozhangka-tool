@@ -94,6 +94,8 @@ static unsigned char *read_file_all_from_utf8(const char *path, size_t *outLen)
 
 /* ================= 状态栏 / 列表 ================= */
 
+static void float_set_label(const char *utf8);    /* 前向:悬浮窗状态同步(定义在后部) */
+
 static void set_status(const char *fmt, ...)
 {
     char buf[512];
@@ -101,6 +103,7 @@ static void set_status(const char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
+    float_set_label(buf);                 /* 状态变化同步悬浮窗 */
     xui_set_text(g_status, buf);
 }
 
@@ -1072,6 +1075,68 @@ static void on_settings(XuiWgt *btn, void *ud)
     g_setDlg = NULL;
 }
 
+/* ===================== 悬浮窗(与 Windows 对齐) ===================== */
+
+static XuiWin *g_floatWin;
+static XuiWgt *g_floatLbl;
+
+static void float_set_label(const char *utf8)
+{
+    if (g_floatWin && g_floatLbl) xui_set_text(g_floatLbl, utf8);
+}
+
+static void on_float_start(XuiWgt *b, void *ud) { (void)b; (void)ud; start_run(); }
+static void on_float_pause(XuiWgt *b, void *ud) { (void)b; (void)ud; toggle_pause(); }
+static void on_float_stop(XuiWgt *b, void *ud)  { (void)b; (void)ud; stop_run(); }
+
+static void float_save_pos(void)
+{
+    if (!g_floatWin) return;
+    int x = 0, y = 0;
+    xui_window_pos(g_floatWin, &x, &y);
+    ls_set_float_pos(x, y);
+    ls_save();
+}
+
+/* 悬浮窗点 X 关闭:记位置并允许销毁(句柄置空) */
+static int float_on_close(XuiWin *w, void *ud)
+{
+    (void)w; (void)ud;
+    float_save_pos();
+    g_floatWin = NULL;
+    g_floatLbl = NULL;
+    return 1;
+}
+
+static void on_float_toggle(XuiWgt *btn, void *ud)
+{
+    (void)btn; (void)ud;
+    if (!g_floatWin) {
+        g_floatWin = xui_window_new(g_ui, 336, 106,
+                                    "\xe6\x82\xac\xe6\xb5\xae\xe7\xaa\x97");   /* 悬浮窗 */
+        XuiWin *fw = g_floatWin;
+        xui_window_stay_top(fw);
+        xui_window_set_close(fw, float_on_close, NULL);
+        g_floatLbl = xui_label(fw, 10, 6, 316, 22,
+                               "\xe7\xa9\xba\xe9\x97\xb2");                     /* 空闲 */
+        xui_button(fw, 8,   40, 74, 28,
+                   "\xe5\xbc\x80\xe5\xa7\x8b", on_float_start, NULL);           /* 开始 */
+        xui_button(fw, 88,  40, 74, 28,
+                   "\xe6\x9a\x82\xe5\x81\x9c", on_float_pause, NULL);           /* 暂停 */
+        xui_button(fw, 168, 40, 74, 28,
+                   "\xe7\xbb\xa7\xe7\xbb\xad", on_float_pause, NULL);           /* 继续 */
+        xui_button(fw, 248, 40, 74, 28,
+                   "\xe5\x81\x9c\xe6\xad\xa2", on_float_stop, NULL);            /* 停止 */
+        xui_window_show(fw);
+        int fx = -1, fy = -1;             /* 记忆位置 */
+        ls_get_float_pos(&fx, &fy);
+        if (fx >= 0 && fy >= 0) xui_window_move(g_floatWin, fx, fy);
+    } else {
+        float_save_pos();                 /* 再点入口=隐藏并记位置 */
+        xui_window_hide(g_floatWin);
+    }
+}
+
 static void on_quick_pick(XuiWgt *btn, void *data)
 {
     (void)btn; (void)data;
@@ -1128,6 +1193,7 @@ static void on_hotkey(XUi *ui, KeySym ks, unsigned state, void *ud)
 static int on_close(XuiWin *w, void *ud)
 {
     (void)w; (void)ud;
+    float_save_pos();                     /* 退出前记悬浮窗位置 */
     if (g_running) {
         g_stop_flag = 1;
         pthread_join(g_thread, NULL);   /* sleep 可中断,通常几十毫秒内结束 */
@@ -1186,6 +1252,8 @@ int main(int argc, char **argv)
     mk_btn(g_win, &bx, "\xe7\xa6\x81\xe7\x94\xa8/\xe5\x90\xaf\xe7\x94\xa8",
            on_toggle_dis, NULL, 6);                                        /* 禁用/启用 */
     mk_btn(g_win, &bx, "\xe8\xae\xbe\xe7\xbd\xae", on_settings, NULL, 6); /* 设置 */
+    mk_btn(g_win, &bx, "\xe6\x82\xac\xe6\xb5\xae\xe7\xaa\x97",
+           on_float_toggle, NULL, 6);                                     /* 悬浮窗 */
     mk_btn(g_win, &bx, "\xe2\x86\x91", on_move, (void *)(intptr_t)-1, 6);  /* ↑ */
     mk_btn(g_win, &bx, "\xe2\x86\x93", on_move, (void *)(intptr_t)1, 6);   /* ↓ */
     mk_btn(g_win, &bx, "\xe5\x8f\x96\xe7\x82\xb9", on_quick_pick, NULL, 6); /* 取点 */

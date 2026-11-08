@@ -1261,6 +1261,35 @@ XuiWgt *xui_button_col(XuiWin *p, int x,int y,int w,int h,
     return g;
 }
 
+void xui_window_stay_top(XuiWin *w)
+{
+    XUi *ui = w->ui;
+    Atom above = XInternAtom(ui->dpy, "_NET_WM_STATE_ABOVE", False);
+    Atom state = XInternAtom(ui->dpy, "_NET_WM_STATE", False);
+    XChangeProperty(ui->dpy, w->win, state, XA_ATOM, 32, PropModeReplace,
+                    (unsigned char *)&above, 1);
+}
+
+void xui_window_move(XuiWin *w, int x, int y)
+{
+    XMoveWindow(w->ui->dpy, w->win, x, y);
+}
+
+void xui_window_pos(XuiWin *w, int *x, int *y)
+{
+    Window child;
+    int xx = 0, yy = 0;
+    XTranslateCoordinates(w->ui->dpy, w->win, w->ui->root,
+                          0, 0, &xx, &yy, &child);
+    if (x) *x = xx;
+    if (y) *y = yy;
+}
+
+void xui_window_hide(XuiWin *w)
+{
+    XUnmapWindow(w->ui->dpy, w->win);
+}
+
 /* ==================== 消息框 ==================== */
 
 typedef struct { XuiWin *w; int result; } AlertCtx;

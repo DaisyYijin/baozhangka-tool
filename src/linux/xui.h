@@ -40,6 +40,10 @@ void    xui_window_set_close(XuiWin *w, XuiCloseFn fn, void *ud);
 void    xui_window_set_default(XuiWin *w, XuiWgt *okBtn, XuiWgt *cancelBtn);
 void    xui_set_theme(XUi *ui, unsigned long rgb);   /* 主题色 0xRRGGBB(选中/强调色联动) */
 void    xui_ungrab_keys(XUi *ui, KeySym ks, unsigned mods); /* 解除全局热键 */
+void    xui_window_stay_top(XuiWin *w);              /* 置顶(EWMH _NET_WM_STATE_ABOVE) */
+void    xui_window_move(XuiWin *w, int x, int y);    /* 移动到屏幕坐标 */
+void    xui_window_pos(XuiWin *w, int *x, int *y);   /* 取屏幕坐标 */
+void    xui_window_hide(XuiWin *w);                  /* 隐藏(Unmap) */
 
 /* ---- 控件(父窗口内绝对布局,坐标含边框) ---- */
 XuiWgt *xui_label (XuiWin *p, int x,int y,int w,int h, const char *utf8);
