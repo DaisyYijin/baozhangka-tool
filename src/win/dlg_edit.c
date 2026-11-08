@@ -36,6 +36,7 @@ enum {
        会误把确定按钮一并隐藏(v1.5.0 起的潜伏 bug) */
     IDC_LB_TPL = 140, IDC_PICKTPL, IDC_TPLINFO, IDC_LB_MISSJUMP, IDC_MISSJUMP,
     IDC_TYPEHELP = 148,               /* 底部:按类型的通俗填写说明(灰字多行) */
+    IDC_PICKREGION,                   /* 找图:框选搜索区域(局域识图) */
     IDC_IMPSHEET = 146, IDC_IMPCOL,
 };
 
@@ -216,7 +217,8 @@ static const wchar_t *const TYPE_HELP[ACT_TYPE_COUNT_] = {
     L"动作:0=只定位到该处,1=单击它,2=双击它;「找到则跳转」可跳步骤;\n"
     L"「未找到跳转」常用于先去点开下拉菜单再回来找;\n"
     L"容差(0-255)越大越宽松,找不到时可调大试试(默认 20);\n"
-    L"搜索区宽/高填 0 = 全屏搜索(默认)。",
+    L"搜索范围两种:宽/高填 0 = 全屏(默认);\n"
+    L"或点「⊞ 框选区域」拖动圈定范围,区域外的相似图不参与匹配。",
     /* ACT_XLSIF Excel判断 */
     L"读取 Excel 当前行指定列的文字,按条件跳到不同步骤:\n"
     L"条件写法:文字=>步骤号,多个条件用逗号分开。\n"
@@ -250,6 +252,7 @@ static void layout_rows(int type)
             IDC_LB_DELAY, IDC_DELAYB, IDC_DELAYA,
             IDC_LB_NOTE, IDC_NOTE,
             IDC_LB_TPL, IDC_PICKTPL, IDC_TPLINFO, IDC_LB_MISSJUMP, IDC_MISSJUMP,
+            IDC_PICKREGION,
         };
         for (int i = 0; i < (int)(sizeof(allIds) / sizeof(allIds[0])); i++) {
             HWND h = g_edit.ctl[CTL_ID_OF(allIds[i])];
@@ -371,11 +374,18 @@ static void layout_rows(int type)
         place(IDC_H, CT_X + 64, y, 56, 22);
         set_ctl_text(IDC_LB_W,
                      type == ACT_FINDIMG ? L"搜索区 W/H" : L"区域 W / H");
+        if (type == ACT_FINDIMG) {         /* 局域识图:框选搜索范围 */
+            show_ctl(IDC_PICKREGION, 1);
+            place(IDC_PICKREGION, CT_X + 128, y - 1, 96, 24);
+        } else {
+            show_ctl(IDC_PICKREGION, 0);
+        }
         y += ROW_H;
     } else {
         show_ctl(IDC_LB_W, 0);
         show_ctl(IDC_W, 0);
         show_ctl(IDC_H, 0);
+        show_ctl(IDC_PICKREGION, 0);
     }
     /* 行:找图图像模板 */
     if (type == ACT_FINDIMG) {
@@ -590,6 +600,27 @@ static void do_pick_tpl(void)
     set_ctl_text(IDC_TPLINFO, ti);
 }
 
+/* 框选搜索区域(局域识图):拖动圈定找图范围,回填 起点 X/Y + 宽 W/H */
+static void do_pick_region(void)
+{
+    PickResult r;
+    ShowWindow(g_edit.hwnd, SW_HIDE);
+    Sleep(60);
+    int got = pick_screen_point(&r);
+    ShowWindow(g_edit.hwnd, SW_SHOW);
+    SetForegroundWindow(g_edit.hwnd);
+    if (!got) return;
+    if (r.w < 8 || r.h < 8) {
+        MessageBoxW(g_edit.hwnd, L"请在屏幕上拖动框选一块搜索范围(区域不能太小)。",
+                    L"提示", MB_ICONINFORMATION);
+        return;
+    }
+    set_int(IDC_X, r.x);
+    set_int(IDC_Y, r.y);
+    set_int(IDC_W, r.w);
+    set_int(IDC_H, r.h);
+}
+
 /* 编辑窗打开期间,拖动屏幕标记实时更新坐标输入框 */
 int edit_dlg_live_coords(int seq, int x, int y)
 {
@@ -704,6 +735,7 @@ static void on_command(WPARAM wp)
     int id = LOWORD(wp);
     switch (id) {
     case IDC_PICKTPL: do_pick_tpl(); break;
+    case IDC_PICKREGION: do_pick_region(); break;
     case IDC_PICKXY:  do_pick(0); break;
     case IDC_PICKXY2: do_pick(1); break;
     case IDC_BTN_IMPEXCEL: {
@@ -886,6 +918,7 @@ static void build_controls(void)
     /* 找图:模板行 + 找不到跳转行 */
     g_edit.ctl[IDC_LB_TPL - 100] = mk_ctl(L"STATIC", L"图像模板", SS_RIGHT, IDC_LB_TPL, LB_W, 20);
     CTL(L"BUTTON", L"≡ 框选模板", BS_OWNERDRAW, IDC_PICKTPL, 108, 26);
+    CTL(L"BUTTON", L"⊞ 框选区域", BS_OWNERDRAW, IDC_PICKREGION, 96, 24);
     g_edit.ctl[IDC_TPLINFO - 100] = mk_ctl(L"STATIC", L"未框选", 0, IDC_TPLINFO, 130, 20);
     g_edit.ctl[IDC_LB_MISSJUMP - 100] = mk_ctl(L"STATIC", L"未找到跳转", SS_RIGHT, IDC_LB_MISSJUMP, LB_W, 20);
     CTL(L"EDIT", L"", WS_BORDER | ES_NUMBER, IDC_MISSJUMP, 56, 22);

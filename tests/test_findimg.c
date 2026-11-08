@@ -77,6 +77,43 @@ int main(void)
         printf("== 搜索算法 OK ==\n");
     }
 
+    /* ---- 2b) 双相同图案分居两处:局域识图只命中区域内那张 ---- */
+    {
+        int SW2 = 400, SH2 = 120, TW2 = 12, TH2 = 8;
+        unsigned char scr2[400 * 120], tpl2[12 * 8];
+        unsigned int st2 = 777;
+        for (int i = 0; i < SW2 * SH2; i++) {
+            st2 = st2 * 1103515245u + 12345u;
+            scr2[i] = (unsigned char)(st2 >> 16);
+        }
+        /* 图案 A 在 (30,40);把同一图案复制到 (250,40) 作 B——完全相同 */
+        for (int y = 0; y < TH2; y++)
+            for (int x = 0; x < TW2; x++)
+                tpl2[y * TW2 + x] = scr2[(40 + y) * SW2 + 30 + x];
+        for (int y = 0; y < TH2; y++)
+            for (int x = 0; x < TW2; x++)
+                scr2[(40 + y) * SW2 + 250 + x] = tpl2[y * TW2 + x];
+        int fx = -1, fy = -1;
+        /* 全屏:应命中靠左的 A(扫描顺序首个) */
+        CHECK(findimg_search(scr2, SW2, SH2, tpl2, TW2, TH2,
+                             0, 0, 0, SW2, SH2, &fx, &fy) == 1,
+              "全屏应命中");
+        CHECK(fx == 30 + TW2 / 2 && fy == 40 + TH2 / 2, "全屏应命中左侧A");
+        /* 局域(右半区,只含 B):命中 B,绝不命中 A */
+        fx = -1; fy = -1;
+        CHECK(findimg_search(scr2, SW2, SH2, tpl2, TW2, TH2,
+                             0, 200, 0, 200, SH2, &fx, &fy) == 1,
+              "局域应命中B");
+        CHECK(fx == 250 + TW2 / 2 && fy == 40 + TH2 / 2, "局域应命中B而非A");
+        /* 局域(左半区,只含 A):命中 A */
+        fx = -1; fy = -1;
+        CHECK(findimg_search(scr2, SW2, SH2, tpl2, TW2, TH2,
+                             0, 0, 0, 200, SH2, &fx, &fy) == 1,
+              "左半区应命中A");
+        CHECK(fx == 30 + TW2 / 2 && fy == 40 + TH2 / 2, "左半区应命中A中心");
+        printf("== 双相同图案:全屏命中首处/局域只命中区内 ==\n");
+    }
+
     /* ---- 3) CSV 序列化回环(含跨TAB跳转/模板逐字节一致) ---- */
     {
         Task t; task_init(&t);
