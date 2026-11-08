@@ -923,6 +923,153 @@ static void on_toggle_dis(XuiWgt *btn, void *data)
     refresh_list();
 }
 
+/* ===================== 设置对话框(与 Windows 设置中心对齐) ===================== */
+
+/* 预设主题色(与 Windows 一致) */
+static const unsigned long THEME8[8] = {
+    0x0099FFUL, 0x2E7D32UL, 0xE53E3EUL, 0x8E24AAUL,
+    0xEF6C00UL, 0x00897BUL, 0x3949ABUL, 0x5D4037UL
+};
+/* 主键选项(KeySym 值) */
+static const struct { unsigned long ks; const char *label; } HKK[] = {
+    { 0xffc2, "F5" },  { 0xffc3, "F6" },  { 0xffc4, "F7" },  { 0xffc5, "F8" },
+    { 0xffc6, "F9" },  { 0xffc7, "F10" }, { 0xffc8, "F11" }, { 0xffc9, "F12" },
+    { 0xff13, "Pause" }, { 0xff14, "ScrollLock" }, { 0xff63, "Insert" }, { 0xff50, "Home" },
+};
+#define HKK_N ((int)(sizeof(HKK) / sizeof(HKK[0])))
+/* 修饰选项 */
+static const struct { int mod; const char *label; } MODD[] = {
+    { 0, "\xe6\x97\xa0" },                                  /* 无 */
+    { LS_MOD_CTRL, "Ctrl+" }, { LS_MOD_ALT, "Alt+" }, { LS_MOD_SHIFT, "Shift+" },
+    { LS_MOD_CTRL | LS_MOD_ALT, "Ctrl+Alt+" },
+    { LS_MOD_CTRL | LS_MOD_SHIFT, "Ctrl+Shift+" },
+    { LS_MOD_ALT | LS_MOD_SHIFT, "Alt+Shift+" },
+    { LS_MOD_CTRL | LS_MOD_ALT | LS_MOD_SHIFT, "Ctrl+Alt+Shift+" },
+};
+#define MODD_N ((int)(sizeof(MODD) / sizeof(MODD[0])))
+
+static XuiWin *g_setDlg;
+static XuiWgt *g_setKs[3], *g_setMod[3];
+
+static void on_pick_theme(XuiWgt *w, void *ud)
+{
+    (void)w;
+    int i = (int)(intptr_t)ud;
+    if (i < 0 || i > 7) return;
+    ls_set_theme(THEME8[i]);
+    xui_set_theme(g_ui, THEME8[i]);       /* 立即生效;确定时统一落盘 */
+}
+
+static int set_find_ks_idx(unsigned long ks)
+{
+    for (int i = 0; i < HKK_N; i++)
+        if (HKK[i].ks == ks) return i;
+    return 1;                             /* 缺省 F6 */
+}
+static int set_find_mod_idx(int mod)
+{
+    for (int i = 0; i < MODD_N; i++)
+        if (MODD[i].mod == mod) return i;
+    return 0;
+}
+
+static void on_set_ok(XuiWgt *w, void *ud)
+{
+    (void)w; (void)ud;
+    unsigned long ks[3];
+    int md[3];
+    for (int i = 0; i < 3; i++) {
+        int ki = xui_combo_active(g_setKs[i]);
+        int mi = xui_combo_active(g_setMod[i]);
+        ks[i] = HKK[(ki >= 0 && ki < HKK_N) ? ki : 1].ks;
+        md[i] = MODD[(mi >= 0 && mi < MODD_N) ? mi : 0].mod;
+    }
+    if ((ks[0] == ks[1] && md[0] == md[1]) ||
+        (ks[0] == ks[2] && md[0] == md[2]) ||
+        (ks[1] == ks[2] && md[1] == md[2])) {
+        show_info("\xe4\xb8\x89\xe4\xb8\xaa\xe7\x83\xad\xe9\x94\xae\xe4\xb8\x8d\xe8\x83\xbd\xe7\x9b\xb8\xe5\x90\x8c,\xe8\xaf\xb7\xe4\xbf\xae\xe6\x94\xb9\xe5\x85\xb6\xe4\xb8\xad\xe4\xb8\x80\xe4\xb8\xaa\xe3\x80\x82");  /* 三个热键不能相同,请修改其中一个。 */
+        return;                           /* 不关闭 */
+    }
+    for (int i = 0; i < 3; i++) {         /* 重抓热键 */
+        xui_ungrab_keys(g_ui, (KeySym)ls_hot_ks(i), ls_mod_to_x(ls_hot_mod(i)));
+        xui_grab_keys(g_ui, (KeySym)ks[i], ls_mod_to_x(md[i]));
+    }
+    ls_set_hotkeys(ks[0], md[0], ks[1], md[1], ks[2], md[2]);
+    ls_save();
+    set_status("\xe8\xae\xbe\xe7\xbd\xae\xe5\xb7\xb2\xe4\xbf\x9d\xe5\xad\x98(\xe7\x83\xad\xe9\x94\xae/\xe4\xb8\xbb\xe9\xa2\x98\xe7\xab\x8b\xe5\x8d\xb3\xe7\x94\x9f\xe6\x95\x88)");  /* 设置已保存(热键/主题立即生效) */
+    xui_window_exit(g_setDlg, 1);
+}
+
+static void on_set_cancel(XuiWgt *w, void *ud)
+{
+    (void)w; (void)ud;
+    xui_window_exit(g_setDlg, 0);
+}
+
+static void on_set_reset(XuiWgt *w, void *ud)
+{
+    (void)w; (void)ud;
+    /* 默认:主题蓝 + F6/F7/Ctrl+F12 */
+    xui_combo_set_active(g_setKs[0], 1);   /* F6 */
+    xui_combo_set_active(g_setKs[1], 2);   /* F7 */
+    xui_combo_set_active(g_setKs[2], 7);   /* F12 */
+    xui_combo_set_active(g_setMod[0], 0);
+    xui_combo_set_active(g_setMod[1], 0);
+    xui_combo_set_active(g_setMod[2], 1);  /* Ctrl+ */
+    ls_set_theme(THEME8[0]);
+    xui_set_theme(g_ui, THEME8[0]);
+}
+
+static void on_settings(XuiWgt *btn, void *ud)
+{
+    (void)btn; (void)ud;
+    static const char *L_START = "\xe5\xbc\x80\xe5\xa7\x8b\xe9\x94\xae:";  /* 开始键: */
+    static const char *L_PAUSE = "\xe6\x9a\x82\xe5\x81\x9c\xe9\x94\xae:";  /* 暂停键: */
+    static const char *L_STOP  = "\xe5\x81\x9c\xe6\xad\xa2\xe9\x94\xae:";  /* 停止键: */
+    const char *labels[3] = { L_START, L_PAUSE, L_STOP };
+
+    g_setDlg = xui_window_new(g_ui, 420, 400,
+                              "\xe8\xae\xbe\xe7\xbd\xae");                 /* 设置 */
+    XuiWin *dlg = g_setDlg;
+
+    /* 主题色:8 色板 */
+    xui_label(dlg, 14, 12, 120, 22,
+              "\xe4\xb8\xbb\xe9\xa2\x98\xe8\x89\xb2");                      /* 主题色 */
+    for (int i = 0; i < 8; i++)
+        xui_button_col(dlg, 14 + i * 48, 38, 40, 30, THEME8[i],
+                       on_pick_theme, (void *)(intptr_t)i);
+    xui_label(dlg, 14, 74, 300, 20,
+              "\xe7\x82\xb9\xe8\x89\xb2\xe5\x9d\x97\xe7\xab\x8b\xe5\x8d\xb3\xe6\x8d\xa2\xe4\xb8\xbb\xe9\xa2\x98"); /* 点色块立即换主题 */
+
+    /* 全局快捷键:三行(主键+修饰) */
+    xui_label(dlg, 14, 104, 140, 22,
+              "\xe5\x85\xa8\xe5\xb1\x80\xe5\xbf\xab\xe6\x8d\xb7\xe9\x94\xae");  /* 全局快捷键 */
+    for (int r = 0; r < 3; r++) {
+        xui_label(dlg, 14, 132 + r * 34, 70, 22, labels[r]);
+        g_setKs[r] = xui_combo(dlg, 90, 130 + r * 34, 110, 24, NULL, NULL);
+        for (int i = 0; i < HKK_N; i++) xui_combo_add(g_setKs[r], HKK[i].label);
+        xui_combo_set_active(g_setKs[r], set_find_ks_idx(ls_hot_ks(r)));
+        g_setMod[r] = xui_combo(dlg, 210, 130 + r * 34, 150, 24, NULL, NULL);
+        for (int i = 0; i < MODD_N; i++) xui_combo_add(g_setMod[r], MODD[i].label);
+        xui_combo_set_active(g_setMod[r], set_find_mod_idx(ls_hot_mod(r)));
+    }
+    xui_label(dlg, 14, 236, 390, 20,
+              "\xe4\xbf\xae\xe9\xa5\xb0\xe9\x94\xae+\xe4\xb8\xbb\xe9\x94\xae\xe8\x87\xaa\xe7\x94\xb1\xe7\xbb\x84\xe5\x90\x88,\xe7\xa1\xae\xe5\xae\x9a\xe5\x90\x8e\xe7\xab\x8b\xe5\x8d\xb3\xe7\x94\x9f\xe6\x95\x88"); /* 修饰键+主键自由组合,确定后立即生效 */
+
+    /* 底部按钮 */
+    XuiWgt *bReset = xui_button(dlg, 14, 348, 96, 28,
+                                "\xe6\x81\xa2\xe5\xa4\x8d\xe9\xbb\x98\xe8\xae\xa4",      /* 恢复默认 */
+                                on_set_reset, NULL);
+    XuiWgt *bOk = xui_button(dlg, 226, 348, 80, 28,
+                             "\xe7\xa1\xae\xe5\xae\x9a", on_set_ok, NULL);                /* 确定 */
+    XuiWgt *bCancel = xui_button(dlg, 316, 348, 80, 28,
+                                 "\xe5\x8f\x96\xe6\xb6\x88", on_set_cancel, NULL);       /* 取消 */
+    (void)bReset;
+    xui_window_set_default(dlg, bOk, bCancel);
+    xui_window_run(dlg);
+    g_setDlg = NULL;
+}
+
 static void on_quick_pick(XuiWgt *btn, void *data)
 {
     (void)btn; (void)data;
@@ -1036,6 +1183,7 @@ int main(int argc, char **argv)
     mk_btn(g_win, &bx, "\xe5\x88\xa0\xe9\x99\xa4", on_del, NULL, 6);       /* 删除 */
     mk_btn(g_win, &bx, "\xe7\xa6\x81\xe7\x94\xa8/\xe5\x90\xaf\xe7\x94\xa8",
            on_toggle_dis, NULL, 6);                                        /* 禁用/启用 */
+    mk_btn(g_win, &bx, "\xe8\xae\xbe\xe7\xbd\xae", on_settings, NULL, 6); /* 设置 */
     mk_btn(g_win, &bx, "\xe2\x86\x91", on_move, (void *)(intptr_t)-1, 6);  /* ↑ */
     mk_btn(g_win, &bx, "\xe2\x86\x93", on_move, (void *)(intptr_t)1, 6);   /* ↓ */
     mk_btn(g_win, &bx, "\xe5\x8f\x96\xe7\x82\xb9", on_quick_pick, NULL, 6); /* 取点 */
