@@ -1077,6 +1077,8 @@ static void on_settings(XuiWgt *btn, void *ud)
 
 /* ===================== 悬浮窗(与 Windows 对齐) ===================== */
 
+static void toggle_pause(void);           /* 前向:定义在 on_hotkey 前,此处先用于按钮回调 */
+
 static XuiWin *g_floatWin;
 static XuiWgt *g_floatLbl;
 
