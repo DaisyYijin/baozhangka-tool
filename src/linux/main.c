@@ -111,6 +111,9 @@ static void refresh_list(void)
         char idx[16], typeU8[64], coordStr[96], cntStr[32], text[AC_TEXT_MAX * 3 + 64], delayStr[48];
         snprintf(idx, sizeof(idx), "%d", i + 1);
         wcs_to_u8(act_type_name(s->type), typeU8, sizeof(typeU8) - 1);
+        if (s->disabled)                    /* 禁用标记 */
+            strncat(typeU8, "(\xe7\xa6\x81\xe7\x94\xa8)",
+                    sizeof(typeU8) - strlen(typeU8) - 1);
         switch (s->type) {
         case ACT_DRAG:
             snprintf(coordStr, sizeof(coordStr), "(%d,%d)\xe2\x86\x92(%d,%d)", s->x, s->y, s->x2, s->y2);
@@ -396,6 +399,7 @@ typedef struct {
     XuiWgt *lb_wh, *w, *h;              /* 找图:搜索区宽高 */
     XuiWgt *btn_tpl, *tplinfo;          /* 找图:框选模板 */
     XuiWgt *actCombo, *tolCombo;        /* 找图:动作下拉(点击方式)/容差下拉(档位) */
+    XuiWgt *tolEntry;                   /* 找图:容差数字输入(0-255,真值源) */
     XuiWgt *lb_miss, *miss;             /* 找图:未找到跳转 */
     char *tplB64;
     int tplW, tplH;
@@ -421,9 +425,22 @@ static const struct { int type; const char *cn; const char *help; } EDIT_TYPES[]
     { ACT_FINDIMG, "\xe6\x89\xbe\xe5\x9b\xbe",
       "\xe5\x85\x88\xe6\xa1\x86\xe9\x80\x89\xe6\xa8\xa1\xe6\x9d\xbf\xe5\x9b\xbe,\xe6\x89\xa7\xe8\xa1\x8c\xe6\x97\xb6\xe6\x90\x9c\xe7\xb4\xa2;\xe3\x80\x8c\xe5\x8a\xa8\xe4\xbd\x9c\xe3\x80\x8d\xe4\xb8\x8b\xe6\x8b\x89\xe9\x80\x89 \xe5\x8d\x95\xe5\x87\xbb/\xe5\x8f\x8c\xe5\x87\xbb/\xe4\xb8\x89\xe5\x87\xbb;\xe6\x9c\xaa\xe6\x89\xbe\xe5\x88\xb0\xe5\x8f\xaf\xe8\xb7\xb3\xe8\xbd\xac" }, /* 先框选模板图,执行时搜索;「动作」下拉选 单击/双击/三击;未找到可跳转 */
     { ACT_XLSIF,   "Excel\xe5\x88\xa4\xe6\x96\xad",
-      "\xe8\xaf\xbb\xe5\xbd\x93\xe5\x89\x8d\xe8\xa1\x8c\xe6\x8c\x87\xe5\xae\x9a\xe5\x88\x97,\xe4\xbb\xbb\xe6\x84\x8f\xe5\x80\xbc\xe5\xa4\x9a\xe5\x88\x86\xe6\x94\xaf,\xe5\xa6\x82 \xe7\x94\xb7=>2,\xe5\xa5\xb3=>5,9527=>6;\xe4\xb8\x8d\xe5\x8c\xb9\xe9\x85\x8d\xe5\x88\x99\xe7\xbb\xa7\xe7\xbb\xad;\xe5\x80\xbc\xe5\x86\x85\xe4\xb8\x8d\xe8\x83\xbd\xe5\xb8\xa6\xe9\x80\x97\xe5\x8f\xb7;\xe5\x88\x97\xe5\x8f\xb70={\\xe8\\xa1\\x8c}\\xe5\x88\x97" }, /* 读当前行指定列,任意值多分支,如 男=>2,女=>5,9527=>6;不匹配则继续;值内不能带逗号;列号0={行}列 */
+      "\xe8\xaf\xbb\xe5\xbd\x93\xe5\x89\x8d\xe8\xa1\x8c\xe6\x8c\x87\xe5\xae\x9a\xe5\x88\x97,\xe4\xbb\xbb\xe6\x84\x8f\xe5\x80\xbc\xe5\xa4\x9a\xe5\x88\x86\xe6\x94\xaf,\xe5\xa6\x82 \xe7\x94\xb7=>2,\xe5\xa5\xb3=>5,9527=>6;\xe5\x85\xa8\xe4\xb8\x8d\xe5\x8c\xb9\xe9\x85\x8d\xe5\x8f\xaf\xe8\xb7\xb3\xe8\xbd\xac;\xe5\x80\xbc\xe5\x86\x85\xe4\xb8\x8d\xe8\x83\xbd\xe5\xb8\xa6\xe9\x80\x97\xe5\x8f\xb7;\xe5\x88\x97\xe5\x8f\xb70={\\xe8\\xa1\\x8c}\\xe5\x88\x97" }, /* 读当前行指定列,任意值多分支;全不匹配可跳转;值内不能带逗号;列号0={行}列 */
 };
 #define EDIT_TYPE_N ((int)(sizeof(EDIT_TYPES) / sizeof(EDIT_TYPES[0])))
+
+/* 容差下拉选档 → 同步数字输入框(输入框为真值源,可手改 0-255) */
+static void on_tol_pick(XuiWgt *w, void *ud)
+{
+    EditBox *eb = (EditBox *)ud; (void)w;
+    static const int tv[5] = { 0, 10, 20, 40, 80 };
+    int ti = xui_combo_active(eb->tolCombo);
+    if (ti >= 0 && ti < 5) {
+        char v[16];
+        snprintf(v, sizeof(v), "%d", tv[ti]);
+        xui_set_text(eb->tolEntry, v);
+    }
+}
 
 static void edit_apply_type(EditBox *eb)
 {
@@ -476,8 +493,11 @@ static void edit_apply_type(EditBox *eb)
     xui_show(eb->h, findimg);
     xui_show(eb->btn_tpl, findimg);
     xui_show(eb->tplinfo, findimg);
-    xui_show(eb->lb_miss, findimg);
-    xui_show(eb->miss, findimg);
+    xui_show(eb->lb_miss, findimg || xlsif);
+    xui_show(eb->miss, findimg || xlsif);
+    if (xlsif)
+        xui_set_text(eb->lb_miss,
+                     "\xe5\x85\xa8\xe4\xb8\x8d\xe5\x8c\xb9\xe9\x85\x8d\xe2\x86\x92:");  /* 全不匹配→: */
     xui_set_text(eb->lb_delay, type == ACT_WAIT ?
                  "\xe7\xad\x89\xe5\xbe\x85\xe6\x97\xb6\xe9\x95\xbf(\xe6\xaf\xab\xe7\xa7\x92):" :   /* 等待时长 */
                  "\xe5\x89\x8d\xe5\xbb\xb6\xe6\x97\xb6 / \xe5\x90\x8e\xe5\xbb\xb6\xe6\x97\xb6(ms):"); /* 前延时/后延时 */
@@ -544,13 +564,12 @@ static void edit_on_ok(XuiWgt *w, void *ud)
     s->y = atoi(xui_entry_text(eb->y));
     s->count = atoi(xui_entry_text(eb->count));
     s->interval = atoi(xui_entry_text(eb->interval));
-    if (s->type == ACT_FINDIMG) {       /* 动作/容差从下拉取(数字输入已废弃) */
+    if (s->type == ACT_FINDIMG) {       /* 动作下拉+容差数字框(0-255) */
         int ai = xui_combo_active(eb->actCombo);
         s->count = (ai >= 0 && ai <= 3) ? ai : 1;
-        static const int tv[5] = { 0, 10, 20, 40, 80 };
-        int ti = xui_combo_active(eb->tolCombo);
         s->interval = 0;
-        s->ifTol = (ti >= 0 && ti < 5) ? tv[ti] : 20;
+        s->ifTol = atoi(xui_entry_text(eb->tolEntry));
+        if (s->ifTol < 0 || s->ifTol > 255) s->ifTol = 20;
     }
     s->x2 = atoi(xui_entry_text(eb->x2));
     s->y2 = atoi(xui_entry_text(eb->y2));
@@ -574,6 +593,8 @@ static void edit_on_ok(XuiWgt *w, void *ud)
                       "\xe6\x88\xaa\xe5\x8f\x96\xe8\xa6\x81\xe6\x9f\xa5\xe6\x89\xbe\xe7\x9a\x84\xe5\x9b\xbe\xe5\x83\x8f\xe3\x80\x82"); /* 请先点「框选模板」截取要查找的图像。 */
             return;                     /* 不关闭对话框 */
         }
+    } else if (s->type == ACT_XLSIF) {
+        s->missJump = atoi(xui_entry_text(eb->miss));
     } else {
         s->missJump = 0;
     }
@@ -602,7 +623,7 @@ static int edit_step_dialog(Step *s, int isNew)
     eb.dlg = dlg; eb.s = s;
 
     char xs[32], ys[32], cs[32], is[32], ss[32], x2s[32], y2s[32], dbs[32], das[32];
-    char ws[32], hs[32], missS[32];
+    char ws[32], hs[32], missS[32], tolS[16];
     char textU8[AC_TEXT_MAX * 3 + 8];
     textU8[0] = 0;
     if (s->text[0]) wcs_to_u8(s->text, textU8, sizeof(textU8) - 1);
@@ -619,6 +640,7 @@ static int edit_step_dialog(Step *s, int isNew)
     snprintf(ws, sizeof(ws), "%d", s->w);
     snprintf(hs, sizeof(hs), "%d", s->h);
     snprintf(missS, sizeof(missS), "%d", s->missJump);
+    snprintf(tolS, sizeof(tolS), "%d", s->ifTol > 0 ? s->ifTol : 20);
     char tplInit[48];
     tplInit[0] = 0;
     if (s->type == ACT_FINDIMG && s->imgB64 && s->imgB64[0]) {
@@ -674,7 +696,8 @@ static int edit_step_dialog(Step *s, int isNew)
     xui_combo_add(eb.actCombo, "\xe5\x8f\x8c\xe5\x87\xbb\xe5\xae\x83");                          /* 双击它 */
     xui_combo_add(eb.actCombo, "\xe4\xb8\x89\xe5\x87\xbb\xe5\xae\x83");                          /* 三击它 */
     xui_combo_set_active(eb.actCombo, s->count >= 0 && s->count <= 3 ? s->count : 1);
-    eb.tolCombo = xui_combo(dlg, L + W1 + 112, y, 116, EH, NULL, NULL);
+    eb.tolCombo = xui_combo(dlg, L + W1 + 112, y, 116, EH, on_tol_pick, &eb);
+    eb.tolEntry = xui_entry(dlg, L + W1 + 234, y, 56, EH, tolS);
     xui_combo_add(eb.tolCombo, "\xe4\xb8\xa5\xe6\xa0\xbc(0)");          /* 严格(0) */
     xui_combo_add(eb.tolCombo, "\xe6\xa0\x87\xe5\x87\x86(10)");         /* 标准(10) */
     xui_combo_add(eb.tolCombo, "\xe9\xbb\x98\xe8\xae\xa4(20)");         /* 默认(20) */
@@ -863,9 +886,39 @@ static void on_move(XuiWgt *btn, void *data)
 {
     (void)btn;
     int delta = (int)(intptr_t)data;
+    /* 勾选为连续段 → 整段移动;否则按单选中行移动 */
+    {
+        int idx[512], k = 0;
+        for (int i = 0; i < g_task.count && k < 512; i++)
+            if (xui_list_checked(g_list, i)) idx[k++] = i;
+        if (k > 0) {
+            int lo = idx[0], hi = idx[k - 1];
+            if (hi - lo + 1 == k)
+                task_move_block(&g_task, lo, hi, delta);
+            refresh_list();
+            return;
+        }
+    }
     int i = selected_index();
     task_move(&g_task, i, delta);
     if (i >= 0) xui_list_sel_set(g_list, i + delta);
+    refresh_list();
+}
+
+/* 禁用/启用切换:勾选→批量;否则当前选中行 */
+static void on_toggle_dis(XuiWgt *btn, void *data)
+{
+    (void)btn; (void)data;
+    int idx[512], k = 0;
+    for (int i = 0; i < g_task.count && k < 512; i++)
+        if (xui_list_checked(g_list, i)) idx[k++] = i;
+    if (k > 0) {
+        int on = g_task.steps[idx[0]].disabled ? 0 : 1;
+        task_set_disabled_multi(&g_task, idx, k, on);
+    } else {
+        int i = selected_index();
+        if (i >= 0) g_task.steps[i].disabled = !g_task.steps[i].disabled;
+    }
     refresh_list();
 }
 
@@ -955,6 +1008,8 @@ int main(int argc, char **argv)
     mk_btn(g_win, &bx, "\xe6\xb7\xbb\xe5\x8a\xa0", on_add, NULL, 6);       /* 添加 */
     mk_btn(g_win, &bx, "\xe7\xbc\x96\xe8\xbe\x91", on_edit, NULL, 6);      /* 编辑 */
     mk_btn(g_win, &bx, "\xe5\x88\xa0\xe9\x99\xa4", on_del, NULL, 6);       /* 删除 */
+    mk_btn(g_win, &bx, "\xe7\xa6\x81\xe7\x94\xa8/\xe5\x90\xaf\xe7\x94\xa8",
+           on_toggle_dis, NULL, 6);                                        /* 禁用/启用 */
     mk_btn(g_win, &bx, "\xe2\x86\x91", on_move, (void *)(intptr_t)-1, 6);  /* ↑ */
     mk_btn(g_win, &bx, "\xe2\x86\x93", on_move, (void *)(intptr_t)1, 6);   /* ↓ */
     mk_btn(g_win, &bx, "\xe5\x8f\x96\xe7\x82\xb9", on_quick_pick, NULL, 6); /* 取点 */

@@ -73,7 +73,7 @@ char *findimg_pack(int sw, int sh, int missJump,
                    const unsigned char *tplGray, int tw, int th)
 {
     if (!tplGray || tw < 2 || th < 2 || tw > 256 || th > 256 ||
-        tw * th > 16384) return NULL;
+        tw * th > 65536) return NULL;   /* ≤256x256(总像素 65536) */
     size_t raw = 4 + (size_t)((tw * (size_t)th + 1) / 2);
     unsigned char *d = (unsigned char *)malloc(raw);
     if (!d) return NULL;
@@ -119,7 +119,7 @@ int findimg_unpack(const char *cell, int *sw, int *sh, int *missJump,
     if (!d || n < 5) { free(d); return 0; }
     int W = d[0] | (d[1] << 8);
     int H = d[2] | (d[3] << 8);
-    if (W < 2 || H < 2 || W > 256 || H > 256 || W * H > 16384 ||
+    if (W < 2 || H < 2 || W > 256 || H > 256 || W * H > 65536 ||
         (size_t)4 + (size_t)((W * H + 1) / 2) != n) {
         free(d);
         return 0;

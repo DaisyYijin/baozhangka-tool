@@ -26,7 +26,7 @@ enum {
     COL_ACTION = 0, COL_X, COL_Y, COL_W, COL_H,
     COL_COUNT, COL_INTERVAL, COL_TEXT,
     COL_DELAY_BEFORE, COL_DELAY_AFTER, COL_CLEAR,
-    COL_JUMP, COL_NOTE, COL_IMG,
+    COL_JUMP, COL_ENABLED, COL_NOTE, COL_IMG,
     COL_COUNT_
 };
 
@@ -43,6 +43,7 @@ static const wchar_t *HEADER_ALIASES[COL_COUNT_][6] = {
     [COL_DELAY_AFTER]  = { L"后延时", L"后延时毫秒", L"延时后", L"延时", NULL },
     [COL_CLEAR]        = { L"清空", L"输入前清空", L"clear", NULL },
     [COL_JUMP]         = { L"跳转", L"跳转到", L"jump", NULL },
+    [COL_ENABLED]      = { L"启用", L"enabled", NULL },
     [COL_NOTE]         = { L"备注", L"note", NULL },
     [COL_IMG]          = { L"模板", L"找图", L"image", L"img", NULL },
 };
@@ -138,6 +139,7 @@ int task_import_sheet(Task *t, const Sheet *s, int append)
         map[COL_DELAY_BEFORE] = 6;
         map[COL_DELAY_AFTER] = 7;
         map[COL_CLEAR] = 8;
+        map[COL_ENABLED] = 9;
         map[COL_NOTE] = 10;
     }
 
@@ -273,6 +275,9 @@ int task_import_sheet(Task *t, const Sheet *s, int append)
 
         wchar_t *clr = map[COL_CLEAR] >= 0 ? cell_wcs(s, r, map[COL_CLEAR]) : NULL;
         st.clearFirst = clr ? truthy(clr) : 0;
+
+        wchar_t *en = map[COL_ENABLED] >= 0 ? cell_wcs(s, r, map[COL_ENABLED]) : NULL;
+        st.disabled = (en && wcscmp(en, L"否") == 0) ? 1 : 0;
 
         wchar_t *note = map[COL_NOTE] >= 0 ? cell_wcs(s, r, map[COL_NOTE]) : NULL;
         if (note) wcsncpy(st.note, note, AC_NOTE_MAX - 1);
@@ -489,6 +494,7 @@ char *task_export_csv2(const Task *t, size_t *outLen,
     append_field(&buf, &len, &cap, L"前延时毫秒"); append_str(&buf, &len, &cap, ",", 1);
     append_field(&buf, &len, &cap, L"后延时毫秒"); append_str(&buf, &len, &cap, ",", 1);
     append_field(&buf, &len, &cap, L"输入前清空"); append_str(&buf, &len, &cap, ",", 1);
+    append_field(&buf, &len, &cap, L"启用"); append_str(&buf, &len, &cap, ",", 1);
     append_field(&buf, &len, &cap, L"备注"); append_str(&buf, &len, &cap, ",", 1);
     append_field(&buf, &len, &cap, L"模板");
     csv_row_end(&buf, &len, &cap);
@@ -531,6 +537,8 @@ char *task_export_csv2(const Task *t, size_t *outLen,
         append_int(&buf, &len, &cap, s->delayBefore); append_str(&buf, &len, &cap, ",", 1);
         append_int(&buf, &len, &cap, s->delayAfter);  append_str(&buf, &len, &cap, ",", 1);
         append_field(&buf, &len, &cap, s->clearFirst ? L"是" : L"否");
+        append_str(&buf, &len, &cap, ",", 1);
+        append_field(&buf, &len, &cap, s->disabled ? L"否" : L"是");
         append_str(&buf, &len, &cap, ",", 1);
         append_field(&buf, &len, &cap, s->note);
         append_str(&buf, &len, &cap, ",", 1);
@@ -813,6 +821,8 @@ char *taskbook_export_csv2(const TaskBook *tb, size_t *outLen,
             bk_field_n(&buf, &len, &cap, s->delayAfter);
             bk_sep(&buf, &len, &cap);
             bk_field_w(&buf, &len, &cap, s->clearFirst ? L"1" : L"");
+            bk_sep(&buf, &len, &cap);
+            bk_field_w(&buf, &len, &cap, s->disabled ? L"" : L"1");
             bk_sep(&buf, &len, &cap);
             bk_field_w(&buf, &len, &cap, s->note);
             bk_sep(&buf, &len, &cap);

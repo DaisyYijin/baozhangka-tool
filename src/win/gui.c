@@ -600,6 +600,17 @@ static void hk_text(wchar_t *buf, int cbch, int mod, int vk)
     (void)cbch;
 }
 
+/* 热键注册失败提示(被占用/与另两键重复时用户可感知) */
+static void hk_warn(HWND hwnd, const wchar_t *role, int mod, int vk)
+{
+    wchar_t kb[48], m[96];
+    hk_text(kb, 48, mod, vk);
+    _snwprintf(m, 95, L"%ls热键注册失败:%ls\n可能被其他程序占用,或与另两个热键重复。",
+               role, kb);
+    m[95] = 0;
+    MessageBoxW(hwnd, m, L"提示", MB_ICONWARNING);
+}
+
 static void start_run(void);
 static void stop_run(void);
 static void toggle_pause(void);
@@ -681,6 +692,12 @@ static void flt_status_text(wchar_t *out, int cap)
 static LRESULT CALLBACK float_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
+    case WM_EXITSIZEMOVE: {           /* 拖动结束即存位置(异常退出不丢) */
+        RECT frc;
+        GetWindowRect(hwnd, &frc);
+        settings_set_float_pos(frc.left, frc.top);
+        return 0;
+    }
     case WM_ERASEBKGND:
         return 1;
     case WM_PAINT: {
@@ -937,8 +954,14 @@ static void refresh_list(void)
         buf[31] = 0;
         ListView_SetItemText(g_hList, idx, 1, buf);
 
-        /* 列2:类型 */
-        ListView_SetItemText(g_hList, idx, 2, (LPWSTR)act_type_name(s->type));
+        /* 列2:类型(禁用加标记) */
+        if (s->disabled) {
+            _snwprintf(buf, 63, L"%ls(\xE7\xA6\x81\xE7\x94\xA8)", act_type_name(s->type));
+            buf[63] = 0;
+            ListView_SetItemText(g_hList, idx, 2, buf);
+        } else {
+            ListView_SetItemText(g_hList, idx, 2, (LPWSTR)act_type_name(s->type));
+        }
 
         /* 列3:坐标 / 跳转目标 / 新类型目标 */
         switch (s->type) {
@@ -1740,7 +1763,8 @@ enum {
     M_ADD, M_EDIT, M_DEL, M_UP, M_DOWN, M_DUP, M_PICK, M_CLEARALL,
     M_START, M_STOP,
     M_ABOUT, M_HELP,
-    CTX_EDIT, CTX_DEL, CTX_UP, CTX_DOWN, CTX_DUP
+    CTX_EDIT, CTX_DEL, CTX_UP, CTX_DOWN, CTX_DUP,
+    CTX_BDEL, CTX_BDIS, CTX_BEN, CTX_BDLYB, CTX_BDLYA, CTX_BUP, CTX_BDOWN
 };
 
 static void show_help(void)
@@ -1762,6 +1786,123 @@ static void show_help(void)
         L"使用说明 - 点击助手", MB_ICONINFORMATION);
 }
 
+/* ---- 简易输入对话框(批量改延时等) ---- */
+static struct {
+    HWND hwnd, edit, ok, cancel;
+    wchar_t prompt[128];
+    int done, okClicked;
+} g_idlg;
+
+static LRESULT CALLBACK input_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC dc = BeginPaint(hwnd, &ps);
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        HBRUSH br = CreateSolidBrush(CARD_BG);
+        FillRect(dc, &rc, br);
+        DeleteObject(br);
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(0x3A,0x3A,0x3A));
+        HGDIOBJ of = g_uiFont ? SelectObject(dc, g_uiFont) : NULL;
+        TextOutW(dc, 14, 12, g_idlg.prompt, (int)wcslen(g_idlg.prompt));
+        if (of) SelectObject(dc, of);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    case WM_COMMAND: {
+        int id = LOWORD(wp);
+        if (id == 1 || id == 2) {
+            g_idlg.okClicked = (id == 1);
+            g_idlg.done = 1;
+        }
+        return 0;
+    }
+    case WM_CLOSE:
+        g_idlg.okClicked = 0;
+        g_idlg.done = 1;
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+/* 返回 1=确定(out 为输入文本);Esc/取消返回 0 */
+static int input_dlg(HWND owner, const wchar_t *title, const wchar_t *prompt,
+                     wchar_t *out, int outMax)
+{
+    static int registered = 0;
+    if (!registered) {
+        WNDCLASSW wc;
+        memset(&wc, 0, sizeof(wc));
+        wc.lpfnWndProc = input_wndproc;
+        wc.hInstance = GetModuleHandleW(NULL);
+        wc.lpszClassName = L"AcInputDlg";
+        wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+        RegisterClassW(&wc);
+        registered = 1;
+    }
+    wcsncpy(g_idlg.prompt, prompt, 127);
+    g_idlg.prompt[127] = 0;
+    g_idlg.done = 0;
+    g_idlg.okClicked = 0;
+    RECT rcO;
+    GetWindowRect(owner, &rcO);
+    int cx = rcO.left + ((rcO.right - rcO.left) - 320) / 2;
+    int cy = rcO.top + ((rcO.bottom - rcO.top) - 150) / 2;
+    g_idlg.hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME, L"AcInputDlg", title,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+        cx, cy, 320, 150, owner, NULL, GetModuleHandleW(NULL), NULL);
+    if (!g_idlg.hwnd) return 0;
+    g_idlg.edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", out,
+        WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 14, 40, 290, 24,
+        g_idlg.hwnd, (HMENU)3, NULL, NULL);
+    g_idlg.ok = CreateWindowExW(0, L"BUTTON", L"确定",
+        WS_CHILD | WS_VISIBLE, 130, 84, 80, 28, g_idlg.hwnd, (HMENU)1, NULL, NULL);
+    g_idlg.cancel = CreateWindowExW(0, L"BUTTON", L"取消",
+        WS_CHILD | WS_VISIBLE, 220, 84, 80, 28, g_idlg.hwnd, (HMENU)2, NULL, NULL);
+    if (g_uiFont) {
+        SendMessageW(g_idlg.edit, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+        SendMessageW(g_idlg.ok, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+        SendMessageW(g_idlg.cancel, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+    }
+    ShowWindow(g_idlg.hwnd, SW_SHOW);
+    EnableWindow(owner, FALSE);
+    g_uiDlgActive = 1;
+    MSG msg;
+    while (!g_idlg.done) {
+        if (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) break;
+            if (msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN) {
+                g_idlg.okClicked = 1;
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        } else {
+            WaitMessage();
+        }
+    }
+    g_uiDlgActive = 0;
+    EnableWindow(owner, TRUE);
+    if (g_idlg.okClicked) GetWindowTextW(g_idlg.edit, out, outMax);
+    DestroyWindow(g_idlg.hwnd);
+    SetForegroundWindow(owner);
+    return g_idlg.okClicked;
+}
+
+/* 收集列表勾选的步骤索引(升序);返回数量 */
+static int collect_checked(int *idx, int maxN)
+{
+    int n = 0;
+    for (int i = 0; i < g_task.count && n < maxN; i++)
+        if (ListView_GetCheckState(g_hList, i)) idx[n++] = i;
+    return n;
+}
+
 /* 右键菜单 */
 static void list_context_menu(void)
 {
@@ -1773,6 +1914,24 @@ static void list_context_menu(void)
     AppendMenuW(m, MF_STRING, CTX_UP,     L"上移");
     AppendMenuW(m, MF_STRING, CTX_DOWN,   L"下移");
     AppendMenuW(m, MF_STRING, CTX_DUP,    L"复制");
+    /* 勾选≥1:批量操作 */
+    {
+        int cidx[512];
+        int cn = collect_checked(cidx, 512);
+        if (cn > 0) {
+            wchar_t lb[48];
+            AppendMenuW(m, MF_SEPARATOR, 0, NULL);
+            _snwprintf(lb, 47, L"批量删除 %d 项", cn);
+            lb[47] = 0;
+            AppendMenuW(m, MF_STRING, CTX_BDEL, lb);
+            AppendMenuW(m, MF_STRING, CTX_BDIS, L"禁用选中");
+            AppendMenuW(m, MF_STRING, CTX_BEN,  L"启用选中");
+            AppendMenuW(m, MF_STRING, CTX_BDLYB, L"改前延时…");
+            AppendMenuW(m, MF_STRING, CTX_BDLYA, L"改后延时…");
+            AppendMenuW(m, MF_STRING, CTX_BUP,   L"整段上移");
+            AppendMenuW(m, MF_STRING, CTX_BDOWN, L"整段下移");
+        }
+    }
     POINT pt;
     GetCursorPos(&pt);
     TrackPopupMenu(m, TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_hMain, NULL);
@@ -2278,9 +2437,12 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                                     GetModuleHandleW(NULL), NULL);
         SendMessageW(g_hStatus, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
 
-        RegisterHotKey(hwnd, HOTK_STOP,  settings_stop_mod(),  settings_stop_hotkey());
-        RegisterHotKey(hwnd, HOTK_START, settings_float_mod(), settings_float_hotkey());
-        RegisterHotKey(hwnd, HOTK_PAUSE, settings_pause_mod(), settings_pause_hotkey());
+        if (!RegisterHotKey(hwnd, HOTK_STOP,  settings_stop_mod(),  settings_stop_hotkey()))
+            hk_warn(hwnd, L"停止", settings_stop_mod(), settings_stop_hotkey());
+        if (!RegisterHotKey(hwnd, HOTK_START, settings_float_mod(), settings_float_hotkey()))
+            hk_warn(hwnd, L"开始", settings_float_mod(), settings_float_hotkey());
+        if (!RegisterHotKey(hwnd, HOTK_PAUSE, settings_pause_mod(), settings_pause_hotkey()))
+            hk_warn(hwnd, L"暂停", settings_pause_mod(), settings_pause_hotkey());
         SetTimer(hwnd, 3, 30, NULL);          /* 按钮悬停轮询 */
         SetTimer(hwnd, 9, 60000, NULL);   /* 定时执行检查 */
 
@@ -2474,6 +2636,10 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 log_add(L"倒计时 %d ms,期间请勿移动鼠标…", (int)lp);
         } else {
             g_progLoop = (int)wp;         /* 记录当前轮次(悬浮窗进度) */
+            /* 当前行滚动跟随+选中(长列表执行时可见当前步) */
+            ListView_EnsureVisible(g_hList, (int)lp, FALSE);
+            ListView_SetItemState(g_hList, -1, 0, LVIS_SELECTED);
+            ListView_SetItemState(g_hList, (int)lp, LVIS_SELECTED, LVIS_SELECTED);
             _snwprintf(buf, 159, L"运行中:第 %d 轮,第 %d 步 / 共 %d 步   ——  暂停:F7 / 停止:Ctrl+F12",
                        (int)wp, (int)lp + 1, g_task.count);
             wchar_t desc[160];
@@ -2563,9 +2729,12 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     UnregisterHotKey(hwnd, HOTK_PAUSE);
                     UnregisterHotKey(hwnd, HOTK_STOP);
                     settings_set_hotkeys(newF, newFM, newP, newPM, newS, newSM);
-                    RegisterHotKey(hwnd, HOTK_STOP,  settings_stop_mod(),  settings_stop_hotkey());
-                    RegisterHotKey(hwnd, HOTK_START, settings_float_mod(), settings_float_hotkey());
-                    RegisterHotKey(hwnd, HOTK_PAUSE, settings_pause_mod(), settings_pause_hotkey());
+                    if (!RegisterHotKey(hwnd, HOTK_STOP, settings_stop_mod(), settings_stop_hotkey()))
+                        hk_warn(hwnd, L"停止", settings_stop_mod(), settings_stop_hotkey());
+                    if (!RegisterHotKey(hwnd, HOTK_START, settings_float_mod(), settings_float_hotkey()))
+                        hk_warn(hwnd, L"开始", settings_float_mod(), settings_float_hotkey());
+                    if (!RegisterHotKey(hwnd, HOTK_PAUSE, settings_pause_mod(), settings_pause_hotkey()))
+                        hk_warn(hwnd, L"暂停", settings_pause_mod(), settings_pause_hotkey());
                 }
                 /* 主题色/开关即时生效 */
                 settings_apply_ui();
@@ -2696,6 +2865,59 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case CTX_DUP: {
             int i = selected_index();
             if (i >= 0) { task_add(&g_task, &g_task.steps[i]); refresh_list(); }
+            return 0;
+        }
+        case CTX_BDEL:  del_step(); return 0;   /* del_step 已含勾选批量逻辑 */
+        case CTX_BDIS:
+        case CTX_BEN: {
+            int cidx[512];
+            int cn = collect_checked(cidx, 512);
+            if (cn > 0) {
+                task_set_disabled_multi(&g_task, cidx, cn, (id == CTX_BDIS) ? 1 : 0);
+                refresh_list();
+                log_add((id == CTX_BDIS) ? L"已禁用 %d 个选中步骤"
+                                         : L"已启用 %d 个选中步骤", cn);
+            }
+            return 0;
+        }
+        case CTX_BDLYB:
+        case CTX_BDLYA: {
+            int cidx[512];
+            int cn = collect_checked(cidx, 512);
+            if (cn > 0) {
+                wchar_t v[16] = L"";
+                if (input_dlg(hwnd, (id == CTX_BDLYB) ? L"批量改前延时" : L"批量改后延时",
+                              L"输入毫秒(0-60000):", v, 15) && v[0]) {
+                    int ms = _wtoi(v);
+                    if (ms >= 0 && ms <= 60000) {
+                        task_set_delay_multi(&g_task, cidx, cn, ms,
+                                             (id == CTX_BDLYB) ? 1 : 2);
+                        refresh_list();
+                        log_add(L"已将 %d 个选中步骤的%s改为 %d 毫秒", cn,
+                                (id == CTX_BDLYB) ? L"前延时" : L"后延时", ms);
+                    } else {
+                        MessageBoxW(hwnd, L"请输入 0-60000 之间的毫秒数。",
+                                    L"提示", MB_ICONINFORMATION);
+                    }
+                }
+            }
+            return 0;
+        }
+        case CTX_BUP:
+        case CTX_BDOWN: {
+            int cidx[512];
+            int cn = collect_checked(cidx, 512);
+            if (cn > 0) {
+                int lo = cidx[0], hi = cidx[cn - 1];
+                if (hi - lo + 1 == cn) {          /* 勾选为连续段 */
+                    if (task_move_block(&g_task, lo, hi,
+                                        (id == CTX_BUP) ? -1 : 1))
+                        refresh_list();
+                } else {
+                    MessageBoxW(hwnd, L"整段移动需要勾选连续的步骤。",
+                                L"提示", MB_ICONINFORMATION);
+                }
+            }
             return 0;
         }
         }

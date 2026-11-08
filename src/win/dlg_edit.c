@@ -38,6 +38,7 @@ enum {
     IDC_TYPEHELP = 148,               /* 底部:按类型的通俗填写说明(灰字多行) */
     IDC_PICKREGION,                   /* 找图:框选搜索区域(局域识图) */
     IDC_ACTCOMBO = 150, IDC_TOLCOMBO, /* 找图:动作下拉(点击方式)/容差下拉(档位) */
+    IDC_DISABLE = 152,                /* 禁用勾选(执行时跳过该步骤) */
     IDC_IMPSHEET = 146, IDC_IMPCOL,
 };
 
@@ -217,13 +218,13 @@ static const wchar_t *const TYPE_HELP[ACT_TYPE_COUNT_] = {
     L"想找到图片后直接点它:「动作」下拉选 单击它/双击它/三击它(只定位=不点);\n"
     L"先点「≡ 框选模板」在屏幕上拖动框选要查找的图块,执行时自动搜索;\n"
     L"「未找到跳转」常用于先去点开下拉菜单再回来找;\n"
-    L"容差下拉越宽松越容易匹配上(默认 20,找不到就选 40/80 试试);\n"
+    L"容差选档或直接输入 0-255,越大越容易匹配(默认 20,找不到调 40/80);\n"
     L"搜索范围两种:宽/高填 0 = 全屏(默认);\n"
     L"或点「⊞ 框选区域」拖动圈定范围,区域外的相似图不参与匹配。",
     /* ACT_XLSIF Excel判断 */
     L"读取 Excel 当前行指定列的文字,按条件跳到不同步骤:\n"
     L"条件写法:文字=>步骤号,多个条件用逗号分开(条件文字内不能带逗号)。\n"
-    L"例:男=>2,女=>5 = 该列是「男」跳第2步、「女」跳第5步,都不是则继续。\n"
+    L"例:男=>2,女=>5 = 男跳第2步、女跳第5步;全不匹配→填「全不匹配→」框(0=继续)。\n"
     L"任意列都行:姓名/证件号/金额等,判断哪列填哪列的序号。\n"
     L"列号:第几列(从 1 数);填 0 = 用数据源绑定的 {行} 列。\n"
     L"提示:分支只影响本行走哪段流程,本轮结束后自动处理下一行。",
@@ -247,6 +248,7 @@ static void layout_rows(int type)
             IDC_LB_TPL, IDC_PICKTPL, IDC_TPLINFO, IDC_LB_MISSJUMP, IDC_MISSJUMP,
             IDC_PICKREGION,
             IDC_ACTCOMBO, IDC_TOLCOMBO,
+            IDC_DISABLE,
         };
         for (int i = 0; i < (int)(sizeof(allIds) / sizeof(allIds[0])); i++) {
             HWND h = g_edit.ctl[CTL_ID_OF(allIds[i])];
@@ -441,8 +443,10 @@ static void layout_rows(int type)
         show_ctl(IDC_JUMPTAB, 0);
     }
 
-    /* 行:找图 未找到跳转(0=继续;常用于"没找到→先去点开下拉") */
-    if (type == ACT_FINDIMG) {
+    /* 行:找图/Excel判断 未找到(全不匹配)跳转(0=继续) */
+    if (type == ACT_FINDIMG || type == ACT_XLSIF) {
+        set_ctl_text(IDC_LB_MISSJUMP,
+                     type == ACT_XLSIF ? L"全不匹配→" : L"未找到跳转");
         show_ctl(IDC_LB_MISSJUMP, 1);
         show_ctl(IDC_MISSJUMP, 1);
         place(IDC_LB_MISSJUMP, LB_X, y + 2, LB_W, 20);
@@ -482,9 +486,11 @@ static void layout_rows(int type)
     place(IDC_DELAYA, CT_X + 80, y, 72, 22);
     y += ROW_H;
 
-    /* 行:启用 + 备注(全部类型) */
+    /* 行:禁用勾选 + 备注(全部类型) */
+    show_ctl(IDC_DISABLE, 1);
     show_ctl(IDC_LB_NOTE, 1);
     show_ctl(IDC_NOTE, 1);
+    place(IDC_DISABLE, CT_X, y, 104, 22);
     place(IDC_LB_NOTE, CT_X + 106, y + 2, 32, 20);
     place(IDC_NOTE, CT_X + 142, y, 106, 22);
     y += ROW_H;
@@ -599,7 +605,7 @@ static void do_pick_tpl(void)
                                 get_int(IDC_MISSJUMP, 0), gray, ow, oh);
     free(gray);
     if (!packed) {
-        MessageBoxW(g_edit.hwnd, L"模板过大(上限约 128x128 像素),请框小一些。",
+        MessageBoxW(g_edit.hwnd, L"模板过大(上限约 256x256 像素),请框小一些。",
                     L"提示", MB_ICONINFORMATION);
         return;
     }
@@ -691,9 +697,12 @@ static int collect(void)
         {
             int ai = (int)SendMessageW(g_edit.ctl[IDC_ACTCOMBO - 100], CB_GETCURSEL, 0, 0);
             s->count = (ai >= 0 && ai <= 3) ? ai : 1;
-            static const int tolVals[5] = { 0, 10, 20, 40, 80 };
-            int ti = (int)SendMessageW(g_edit.ctl[IDC_TOLCOMBO - 100], CB_GETCURSEL, 0, 0);
-            s->ifTol = (ti >= 0 && ti < 5) ? tolVals[ti] : 20;
+            /* 容差:选档位或直接输入 0-255(可编辑下拉) */
+            wchar_t tb2[16];
+            get_ctl_text(IDC_TOLCOMBO, tb2, 15);
+            wchar_t *e2;
+            long tv = wcstol(tb2, &e2, 10);
+            s->ifTol = (e2 != tb2 && tv >= 0 && tv <= 255) ? (int)tv : 20;
         }
         s->missJump = get_int(IDC_MISSJUMP, 0);
         free(s->imgB64);
@@ -713,6 +722,10 @@ static int collect(void)
     s->clearFirst = (SendMessageW(g_edit.ctl[IDC_CLEAR - 100], BM_GETCHECK, 0, 0) == BST_CHECKED);
     get_ctl_text(IDC_TEXT, s->text, AC_TEXT_MAX - 1);
     get_ctl_text(IDC_NOTE, s->note, AC_NOTE_MAX - 1);
+    s->disabled = (SendMessageW(g_edit.ctl[IDC_DISABLE - 100], BM_GETCHECK, 0, 0)
+                   == BST_CHECKED) ? 1 : 0;
+    s->missJump = (s->type == ACT_FINDIMG || s->type == ACT_XLSIF) ?
+                  get_int(IDC_MISSJUMP, 0) : 0;
 
     if (s->type == ACT_TEXT && !s->text[0]) {
         if (gui_excel_bound()) {
@@ -944,7 +957,9 @@ static void build_controls(void)
     CTL(L"EDIT", L"", WS_BORDER | ES_NUMBER, IDC_MISSJUMP, 56, 22);
     /* 找图:动作下拉(找到后点击方式) + 容差下拉(档位) */
     CTL(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, IDC_ACTCOMBO, 96, 130);
-    CTL(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, IDC_TOLCOMBO, 110, 150);
+    CTL(L"COMBOBOX", L"", CBS_DROPDOWN | WS_VSCROLL, IDC_TOLCOMBO, 110, 150);
+    /* 禁用勾选(批量启停的单步入口) */
+    CTL(L"BUTTON", L"禁用(跳过)", BS_AUTOCHECKBOX, IDC_DISABLE, 104, 22);
     {
         static const wchar_t *acts[4] = {
             L"只定位(不点)", L"单击它", L"双击它", L"三击它"
@@ -1505,6 +1520,8 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
     set_int(IDC_X2, s->x2);
     set_int(IDC_Y2, s->y2);
     set_int(IDC_SCROLL, s->scroll != 0 ? s->scroll : 3);
+    SendMessageW(g_edit.ctl[IDC_DISABLE - 100], BM_SETCHECK,
+                 s->disabled ? BST_CHECKED : BST_UNCHECKED, 0);
     set_int(IDC_JUMP, s->jumpTo);
     if (s->type == ACT_CHECK) {
         set_int(IDC_W, s->w);
@@ -1515,6 +1532,8 @@ int edit_step_dialog(HWND owner, Step *s, int isNew)
         set_ctl_text(IDC_COUNT, cb);
         set_int(IDC_INTERVAL, s->ifTol > 0 ? s->ifTol : 10);
     }
+    if (s->type == ACT_XLSIF)
+        set_int(IDC_MISSJUMP, s->missJump);   /* 全不匹配默认跳转预填 */
     if (s->type == ACT_FINDIMG) {
         set_int(IDC_W, s->w);
         set_int(IDC_H, s->h);

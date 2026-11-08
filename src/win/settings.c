@@ -89,8 +89,7 @@ COLORREF ThemeColor(void) { return g_themeColor; }
 
 void settings_set_theme_color(COLORREF c)
 {
-    g_themeColor = c;
-    settings_save();
+    g_themeColor = c;   /* 仅内存即时生效;设置对话框关闭时统一写盘(防抖) */
 }
 
 void settings_get_float_pos(int *x, int *y) { *x = g_fltX; *y = g_fltY; }

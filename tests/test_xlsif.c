@@ -209,6 +209,41 @@ int main(void)
         task_free(t);
     }
 
+    /* ---- 4) 全不匹配默认跳转(missJump:复用找图字段) ---- */
+    {
+        TaskBook tb;
+        memset(&tb, 0, sizeof(tb));
+        Task *t = &tb.tasks[0];
+        t->steps = (Step *)calloc(6, sizeof(Step));
+        t->cap = 6;
+        /* 1:判断(男=>3,全不匹配→2)  2:默认分支(20)  3:男分支(30)  4:尾(40) */
+        Step *xs = &t->steps[t->count++];
+        memset(xs, 0, sizeof(Step));
+        xs->type = ACT_XLSIF;
+        xs->count = 2;                     /* 第2列=性别 */
+        xs->missJump = 2;                  /* 全不匹配→步骤2 */
+        wcsncpy(xs->text, L"男=>3", AC_TEXT_MAX - 1);
+        t->steps[t->count++] = click(20);
+        t->steps[t->count++] = click(30);
+        t->steps[t->count++] = click(40);
+        set_row(t, 2);                     /* 行1男 行2女 */
+        t->dataSelCol = 1;
+        t->loops = 2;
+
+        g_logN = 0;
+        engine_run(&tb, 0, &p, NULL, NULL);
+        /* 行1(男) 匹配=>3: 30,40 ; 行2(女) 全不匹配→missJump=2: 20,30,40 */
+        int exp[] = { 30, 40, 20, 30, 40 };
+        int expN = 5;
+        CHECK(g_logN == expN, "missJump 场景计数不符");
+        int bad = 0;
+        for (int i = 0; i < expN && i < g_logN; i++)
+            if (g_log[i] != exp[i]) { bad = 1; break; }
+        CHECK(bad == 0, "missJump 场景序列不符");
+        printf("== 全不匹配默认跳转 OK ==\n");
+        task_free(t);
+    }
+
     printf("\n%s(%d 个失败)\n", fails ? "*** 存在失败 ***" : "全部通过", fails);
     return fails ? 1 : 0;
 }

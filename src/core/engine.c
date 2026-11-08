@@ -157,6 +157,49 @@ int task_remove_multi(Task *t, const int *indices, int n)
     return removed;
 }
 
+int task_set_disabled_multi(Task *t, const int *indices, int n, int on)
+{
+    if (!t || !indices || n <= 0) return 0;
+    int k = 0;
+    for (int j = 0; j < n; j++)
+        if (indices[j] >= 0 && indices[j] < t->count) {
+            t->steps[indices[j]].disabled = on ? 1 : 0;
+            k++;
+        }
+    return k;
+}
+
+int task_move_block(Task *t, int lo, int hi, int delta)
+{
+    if (!t || lo < 0 || hi >= t->count || lo > hi ||
+        (delta != -1 && delta != 1)) return 0;
+    if (delta < 0) {                    /* 整段上移一格 */
+        if (lo <= 0) return 0;
+        Step tmp = t->steps[lo - 1];
+        for (int k = lo; k <= hi; k++) t->steps[k - 1] = t->steps[k];
+        t->steps[hi] = tmp;
+    } else {                            /* 整段下移一格 */
+        if (hi >= t->count - 1) return 0;
+        Step tmp = t->steps[hi + 1];
+        for (int k = hi; k >= lo; k--) t->steps[k + 1] = t->steps[k];
+        t->steps[lo] = tmp;
+    }
+    return 1;
+}
+
+int task_set_delay_multi(Task *t, const int *indices, int n, int ms, int which)
+{
+    if (!t || !indices || n <= 0 || ms < 0) return 0;
+    int k = 0;
+    for (int j = 0; j < n; j++)
+        if (indices[j] >= 0 && indices[j] < t->count) {
+            if (which & 1) t->steps[indices[j]].delayBefore = ms;
+            if (which & 2) t->steps[indices[j]].delayAfter = ms;
+            k++;
+        }
+    return k;
+}
+
 void task_move(Task *t, int index, int delta)
 {
     int j = index + delta;
@@ -396,6 +439,7 @@ int engine_run(TaskBook *tb, int startTab, const Platform *p,
 continue_loop:
         for (; i < cur->count; i++) {
             Step *s = &cur->steps[i];
+            if (s->disabled) continue;     /* 禁用步骤整轮跳过 */
             if (*(p->stop)) return ENGINE_STOP;
             if (pause_wait(p)) return ENGINE_STOP;   /* 步骤边界挂起(暂停) */
             if (progressCb) progressCb(loop, i, ud);
@@ -551,6 +595,7 @@ continue_loop:
                     wcsncpy(cond, s->text, AC_TEXT_MAX - 1);
                     cond[AC_TEXT_MAX - 1] = 0;
                     wchar_t *ctx = NULL;
+                    int matched = 0;
                     for (wchar_t *seg = wcstok(cond, L",\xFF0C", &ctx); seg;
                          seg = wcstok(NULL, L",\xFF0C", &ctx)) {
                         wchar_t *arrow = wcsstr(seg, L"=>");
@@ -559,6 +604,7 @@ continue_loop:
                         wchar_t *val = trim_ws(seg);
                         wchar_t *tgt = trim_ws(arrow + 2);
                         if (val[0] && wcscmp(val, cellv) == 0) {
+                            matched = 1;
                             long t2 = wcstol(tgt, NULL, 10);
                             if (t2 >= 1 && t2 <= cur->count) {
                                 if (++jumps > 10000) return ENGINE_DONE;
@@ -566,6 +612,11 @@ continue_loop:
                             }
                             break;
                         }
+                    }
+                    /* 全不匹配 → 默认跳转(复用 missJump;0=继续下一步) */
+                    if (!matched && s->missJump >= 1 && s->missJump <= cur->count) {
+                        if (++jumps > 10000) return ENGINE_DONE;
+                        i = s->missJump - 2;
                     }
                 }
                 break;

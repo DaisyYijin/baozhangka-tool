@@ -29,6 +29,12 @@ int  task_add(Task *t, const Step *s);        /* 返回新步骤索引,-1 失败
 void task_remove(Task *t, int index);
 /* 按索引集合批量删除步骤(保持剩余顺序,索引无需有序);返回实际删除数 */
 int task_remove_multi(Task *t, const int *indices, int n);
+/* 批量启停用;返回受影响数 */
+int task_set_disabled_multi(Task *t, const int *indices, int n, int on);
+/* 连续段整体移动一格(delta=±1);越界返回 0 */
+int task_move_block(Task *t, int lo, int hi, int delta);
+/* 批量改延时(ms;which:1=前延时 2=后延时 3=两者) */
+int task_set_delay_multi(Task *t, const int *indices, int n, int ms, int which);
 void task_move(Task *t, int index, int delta); /* delta 上移/下移 */
 void task_move_to(Task *t, int src, int dst);  /* 移到插入位 dst(0..count,列表拖拽用) */
 void task_clear(Task *t);

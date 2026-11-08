@@ -270,6 +270,46 @@ int main(void)
         task_free(t5);
     }
 
+    /* ---- 6) 大模板回环(上限放宽:单边≤256,总像素≤65536) ---- */
+    {
+        int W = 256, H = 256;              /* 65536 像素,恰达上限 */
+        unsigned char *big = (unsigned char *)malloc((size_t)W * H);
+        CHECK(big != NULL, "大模板内存");
+        if (big) {
+            for (int i = 0; i < W * H; i++) big[i] = (unsigned char)(i * 7);
+            char *pk = findimg_pack(0, 0, 0, big, W, H);
+            CHECK(pk != NULL, "256x256 模板应可打包(≤65536 像素)");
+            if (pk) {
+                unsigned char *back = NULL;
+                int bw = 0, bh = 0;
+                CHECK(findimg_unpack(pk, NULL, NULL, NULL, &back, &bw, &bh) == 1,
+                      "大模板应可解包");
+                CHECK(bw == W && bh == H, "大模板尺寸回环");
+                if (back && bw == W && bh == H) {
+                    int okAll = 1;
+                    for (int i = 0; i < W * H; i += 997)
+                        if (back[i] != (big[i] >> 4)) { okAll = 0; break; }
+                    CHECK(okAll, "大模板内容回环(采样)");
+                }
+                free(back);
+                free(pk);
+            }
+            free(big);
+        }
+        /* 超限仍拒绝:总像素超(300x300=90000) 与 单边超(320x200) */
+        {
+            unsigned char *too = (unsigned char *)calloc(300, 300);
+            CHECK(findimg_pack(0, 0, 0, too, 300, 300) == NULL,
+                  "300x300 总像素应超限拒绝");
+            free(too);
+            unsigned char *wide = (unsigned char *)calloc(320 * 200, 1);
+            CHECK(findimg_pack(0, 0, 0, wide, 320, 200) == NULL,
+                  "320x200 单边超 256 应拒绝");
+            free(wide);
+        }
+        printf("== 大模板(256x256)回环+超限拒绝 OK ==\n");
+    }
+
     printf("\n%s(%d 个失败)\n", fails ? "*** 存在失败 ***" : "全部通过", fails);
     return fails ? 1 : 0;
 }

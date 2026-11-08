@@ -29,6 +29,7 @@ static const wchar_t SET_DLG_CLASS[] = L"AcSettingsDlg";
 #define SID_HELP1       130   /* 快捷键说明行1(STATIC,CTLCOLOR 控底色) */
 #define SID_HELP2       131   /* 快捷键说明行2 */
 #define SID_HELP3       132   /* 预留区说明 */
+#define SID_RESET       140   /* 恢复默认按钮 */
 
 /* ---- 色板几何(主窗口自绘区) ---- */
 #define PAL_X   20
@@ -69,7 +70,7 @@ static const struct { int mod; const wchar_t *label; } MOD_OPTIONS[] = {
 #define MOD_OPT_N ((int)(sizeof(MOD_OPTIONS) / sizeof(MOD_OPTIONS[0])))
 
 static struct {
-    HWND hwnd, ok, cancel;
+    HWND hwnd, ok, cancel, reset;
     HWND hkFloat, hkPause, hkStop;
     HWND hkModFloat, hkModPause, hkModStop;
     int done, result;
@@ -205,11 +206,34 @@ static LRESULT CALLBACK set_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (mf >= 0 && mf < MOD_OPT_N) g_st.floatMod = MOD_OPTIONS[mf].mod;
             if (mp >= 0 && mp < MOD_OPT_N) g_st.pauseMod = MOD_OPTIONS[mp].mod;
             if (ms >= 0 && ms < MOD_OPT_N) g_st.stopMod  = MOD_OPTIONS[ms].mod;
+            /* 三键互斥:任意两键组合相同则提示并留在对话框 */
+            if ((g_st.hkFloatVk == g_st.hkPauseVk && g_st.floatMod == g_st.pauseMod) ||
+                (g_st.hkFloatVk == g_st.hkStopVk  && g_st.floatMod == g_st.stopMod) ||
+                (g_st.hkPauseVk == g_st.hkStopVk  && g_st.pauseMod == g_st.stopMod)) {
+                MessageBoxW(g_st.hwnd,
+                    L"\x4E09\x4E2A\x70ED\x952E\x4E0D\x80FD\x76F8\x540C\xFF0C\x8BF7\x4FEE\x6539\x5176\x4E2D\x4E00\x4E2A\x3002",  /* 三个热键不能相同,请修改其中一个。 */
+                    L"\x63D0\x793A", MB_ICONWARNING);
+                return 0;
+            }
             g_st.result = 1;
             g_st.done = 1;
         } else if (id == SID_CANCEL) {
             g_st.result = 0;
             g_st.done = 1;
+        } else if (id == SID_RESET) {
+            /* 恢复默认:主题蓝 + F6/F7/Ctrl+F12 */
+            g_st.theme = RGB(0x00,0x99,0xFF);
+            settings_set_theme_color(g_st.theme);
+            g_st.hkFloatVk = VK_F6;  g_st.floatMod = 0;
+            g_st.hkPauseVk = VK_F7;  g_st.pauseMod = 0;
+            g_st.hkStopVk  = VK_F12; g_st.stopMod  = MOD_CONTROL;
+            SendMessageW(g_st.hkFloat,    CB_SETCURSEL, 1, 0);  /* F6 */
+            SendMessageW(g_st.hkPause,    CB_SETCURSEL, 2, 0);  /* F7 */
+            SendMessageW(g_st.hkStop,     CB_SETCURSEL, 7, 0);  /* F12 */
+            SendMessageW(g_st.hkModFloat, CB_SETCURSEL, 0, 0);  /* 无 */
+            SendMessageW(g_st.hkModPause, CB_SETCURSEL, 0, 0);
+            SendMessageW(g_st.hkModStop,  CB_SETCURSEL, 1, 0);  /* Ctrl+ */
+            InvalidateRect(g_st.hwnd, NULL, FALSE);
         }
         return 0;
     }
@@ -321,11 +345,16 @@ int settings_dialog(HWND owner)
         L"\x53D6\x6D88",
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         SET_W - 100, SET_H - 72, 80, 30, g_st.hwnd, (HMENU)SID_CANCEL, wc.hInstance, NULL);
+    /* 恢复默认:主题蓝+F6/F7/Ctrl+F12 */
+    g_st.reset = CreateWindowExW(0, L"BUTTON",
+        L"\x6062\x590D\x9ED8\x8BA4",
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        20, SET_H - 72, 96, 30, g_st.hwnd, (HMENU)SID_RESET, wc.hInstance, NULL);
 
     if (g_uiFont) {
         HWND kids[] = { g_st.hkFloat, g_st.hkPause, g_st.hkStop,
                         g_st.hkModFloat, g_st.hkModPause, g_st.hkModStop,
-                        g_st.ok, g_st.cancel, NULL };
+                        g_st.ok, g_st.cancel, g_st.reset, NULL };
         for (int i = 0; kids[i]; i++)
             SendMessageW(kids[i], WM_SETFONT, (WPARAM)g_uiFont, TRUE);
         /* 说明 STATIC 与快捷键标签 */
@@ -359,6 +388,7 @@ int settings_dialog(HWND owner)
     g_uiDlgActive = 0;
     KillTimer(g_st.hwnd, 5);
     EnableWindow(owner, TRUE);
+    settings_save();                     /* 统一写盘(主题色即时改内存,此处防抖落盘) */
     DestroyWindow(g_st.hwnd);
     UnregisterClassW(SET_DLG_CLASS, wc.hInstance);
     SetForegroundWindow(owner);

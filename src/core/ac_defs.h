@@ -62,6 +62,7 @@ typedef struct {
     wchar_t  note[AC_NOTE_MAX];       /* 备注 */
     int      missJump;                /* 找图:未找到时跳转的步骤号(0=继续) */
     char    *imgB64;                  /* 找图:模板序列化(findimg_pack;malloc,任务持有) */
+    int      disabled;                /* 禁用(1=执行时跳过;批量启停用) */
 } Step;
 
 /* ---- 任务(步骤列表+全局设置) ---- */
