@@ -165,6 +165,50 @@ int main(void)
         task_free(t);
     }
 
+    /* ---- 3) 通用性:任意列(第1列姓名)+任意值(中文/数字)+4分支+不匹配走默认 ---- */
+    {
+        TaskBook tb;
+        memset(&tb, 0, sizeof(tb));
+        Task *t = &tb.tasks[0];
+        t->steps = (Step *)calloc(10, sizeof(Step));
+        t->cap = 10;
+        /* 1:判断 2,3:默认路径 4:张三分支 5:李四分支 6:9527分支 7:abc分支(永不中) 8:公共尾 */
+        t->steps[t->count++] = xlsif(L"张三=>4,李四=>5,9527=>6,abc=>7", 1);
+        t->steps[t->count++] = click(20);
+        t->steps[t->count++] = click(21);
+        t->steps[t->count++] = click(40);
+        t->steps[t->count++] = click(50);
+        t->steps[t->count++] = click(60);
+        t->steps[t->count++] = click(70);
+        t->steps[t->count++] = click(80);
+        static const wchar_t *rows4[] = {
+            L"张三\t男\t110101199001011234",
+            L"李四\t女\t110101199202022345",
+            L"赵六\t男\t110101199303033456",     /* 姓名不匹配任何条件→走默认 */
+            L"9527\t男\t110101199404044567",     /* 数字姓名→命中 9527=>6 */
+        };
+        t->dataRows = (wchar_t **)calloc(4, sizeof(wchar_t *));
+        t->dataRowCount = 4;
+        for (int i = 0; i < 4; i++) t->dataRows[i] = _wcsdup(rows4[i]);
+        t->dataSelCol = 0;
+        t->loops = 4;
+
+        g_logN = 0;
+        engine_run(&tb, 0, &p, NULL, NULL);
+        /* 跳转到目标步骤后顺序执行到序列尾:
+           行1 张三=>4: 40,50,60,70,80 ; 行2 李四=>5: 50,60,70,80 ;
+           行3 赵六 全不匹配→从头顺序: 20,21,40,50,60,70,80 ; 行4 9527=>6: 60,70,80 */
+        int exp[] = { 40,50,60,70,80,  50,60,70,80,  20,21,40,50,60,70,80,  60,70,80 };
+        int expN = 19;
+        CHECK(g_logN == expN, "通用性场景计数不符");
+        int bad = 0;
+        for (int i = 0; i < expN && i < g_logN; i++)
+            if (g_log[i] != exp[i]) { bad = 1; break; }
+        CHECK(bad == 0, "通用性场景序列不符");
+        printf("== 通用性(第1列姓名/中文+数字值/4分支/默认继续) OK ==\n");
+        task_free(t);
+    }
+
     printf("\n%s(%d 个失败)\n", fails ? "*** 存在失败 ***" : "全部通过", fails);
     return fails ? 1 : 0;
 }
