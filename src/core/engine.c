@@ -472,6 +472,9 @@ continue_loop:
                     unsigned char *tpl = NULL;
                     if (findimg_unpack(s->imgB64, NULL, NULL, NULL,
                                        &tpl, &tww, &thh) && tpl) {
+                        int k;
+                        for (k = 0; k < tww * thh; k++)
+                            tpl[k] <<= 4;   /* 4bit→8bit 域(search 内部再 >>4 量化) */
                         int gx = s->x, gy = s->y;
                         int gw = s->w > 0 ? s->w : 0;
                         int gh = s->h > 0 ? s->h : 0;

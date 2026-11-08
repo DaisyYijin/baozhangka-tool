@@ -11,6 +11,23 @@
 
 #define CHECK(cond, msg) do { if (!(cond)) { printf("FAIL: %s\n", msg); fails++; } } while (0)
 
+/* ---- 引擎链路测试 mock(grab_gray + 鼠标) ---- */
+static unsigned char *g_scrBuf;
+static int g_scrW, g_scrH;
+static int g_reqX, g_reqY, g_reqW, g_reqH;
+static int g_mvX, g_mvY, g_mvN, g_dnN, g_upN;
+static volatile int g_stop2 = 0;
+static unsigned char *gg(int x, int y, int w, int h, int *ow, int *oh)
+{
+    g_reqX = x; g_reqY = y; g_reqW = w; g_reqH = h;
+    *ow = g_scrW; *oh = g_scrH;
+    return g_scrBuf;
+}
+static void mv2(int x, int y) { g_mvX = x; g_mvY = y; g_mvN++; }
+static void dn2(int b) { (void)b; g_dnN++; }
+static void up2(int b) { (void)b; g_upN++; }
+static void slp3(int ms) { (void)ms; }
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -153,6 +170,80 @@ int main(void)
             task_free(&t2);
         }
         task_free(&t);                     /* 释放 s.imgB64(转移至 t) */
+    }
+
+    /* ---- 5) 引擎链路:找到后点击图片中心(动作1=单击 2=双击) ---- */
+    {
+        int SW3 = 200, SH3 = 100, TW3 = 12, TH3 = 8;
+        static unsigned char scr3[200 * 100];
+        unsigned char tpl3[12 * 8];
+        unsigned int st3 = 4242;
+        for (int i = 0; i < SW3 * SH3; i++) {
+            st3 = st3 * 1103515245u + 12345u;
+            scr3[i] = (unsigned char)(st3 >> 16);
+        }
+        for (int y = 0; y < TH3; y++)
+            for (int x = 0; x < TW3; x++)
+                tpl3[y * TW3 + x] = scr3[(40 + y) * SW3 + 30 + x];  /* 图案在 (30,40) */
+        char *packed3 = findimg_pack(0, 0, 0, tpl3, TW3, TH3);
+        CHECK(packed3 != NULL, "引擎链路模板打包");
+
+        Platform p3;
+        memset(&p3, 0, sizeof(p3));
+        p3.grab_gray = gg;
+        p3.mouse_move = mv2;
+        p3.mouse_down = dn2;
+        p3.mouse_up = up2;
+        p3.sleep_ms = slp3;
+        p3.stop = &g_stop2;
+
+        /* 动作1 = 单击:搜索区(100,50)起,命中屏内(30,40),中心=(136,94) */
+        TaskBook tb3;
+        memset(&tb3, 0, sizeof(tb3));
+        Task *t3 = &tb3.tasks[0];
+        t3->steps = (Step *)calloc(2, sizeof(Step));
+        t3->cap = 2;
+        Step *fs = &t3->steps[t3->count++];
+        memset(fs, 0, sizeof(Step));
+        fs->type = ACT_FINDIMG;
+        fs->x = 100; fs->y = 50; fs->w = 200; fs->h = 100;
+        fs->count = 1;               /* 找到后单击 */
+        fs->ifTol = 20;
+        fs->imgB64 = packed3;        /* 所有权转移,task_free 释放 */
+        t3->loops = 1;
+
+        g_scrBuf = scr3; g_scrW = SW3; g_scrH = SH3;
+        g_mvN = g_dnN = g_upN = 0;
+        int r3 = engine_run(&tb3, 0, &p3, NULL, NULL);
+        CHECK(r3 == ENGINE_DONE, "引擎链路应正常完成");
+        CHECK(g_reqX == 100 && g_reqY == 50 && g_reqW == 200 && g_reqH == 100,
+              "抓屏应限定搜索区(100,50,200,100)");
+        CHECK(g_mvN == 1 && g_mvX == 100 + 30 + TW3 / 2 && g_mvY == 50 + 40 + TH3 / 2,
+              "应移动并点击图片中心(136,94)");
+        CHECK(g_dnN == 1 && g_upN == 1, "动作1应单击一次");
+        printf("== 引擎链路:找到后单击图片中心 OK ==\n");
+        task_free(t3);
+
+        /* 动作2 = 双击 */
+        char *packed4 = findimg_pack(0, 0, 0, tpl3, TW3, TH3);
+        TaskBook tb4;
+        memset(&tb4, 0, sizeof(tb4));
+        Task *t4 = &tb4.tasks[0];
+        t4->steps = (Step *)calloc(2, sizeof(Step));
+        t4->cap = 2;
+        Step *fs2 = &t4->steps[t4->count++];
+        memset(fs2, 0, sizeof(Step));
+        fs2->type = ACT_FINDIMG;
+        fs2->x = 100; fs2->y = 50; fs2->w = 200; fs2->h = 100;
+        fs2->count = 2;              /* 找到后双击 */
+        fs2->ifTol = 20;
+        fs2->imgB64 = packed4;
+        t4->loops = 1;
+        g_mvN = g_dnN = g_upN = 0;
+        engine_run(&tb4, 0, &p3, NULL, NULL);
+        CHECK(g_mvN == 1 && g_dnN == 2 && g_upN == 2, "动作2应双击两次");
+        printf("== 引擎链路:动作2双击 OK ==\n");
+        task_free(t4);
     }
 
     printf("\n%s(%d 个失败)\n", fails ? "*** 存在失败 ***" : "全部通过", fails);
