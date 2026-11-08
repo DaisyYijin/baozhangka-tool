@@ -21,7 +21,10 @@ static unsigned char *gg(int x, int y, int w, int h, int *ow, int *oh)
 {
     g_reqX = x; g_reqY = y; g_reqW = w; g_reqH = h;
     *ow = g_scrW; *oh = g_scrH;
-    return g_scrBuf;
+    /* 返回堆副本:engine 用完会 free(真实平台 grab_gray 亦返回 malloc 内存) */
+    unsigned char *cp = (unsigned char *)malloc((size_t)g_scrW * g_scrH);
+    if (cp) memcpy(cp, g_scrBuf, (size_t)g_scrW * g_scrH);
+    return cp;
 }
 static void mv2(int x, int y) { g_mvX = x; g_mvY = y; g_mvN++; }
 static void dn2(int b) { (void)b; g_dnN++; }
