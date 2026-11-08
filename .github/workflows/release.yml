@@ -36,7 +36,7 @@ jobs:
             if [ "$name" = "test_theme" ]; then echo "skip $name (Windows 专属)"; continue; fi
             if gcc -std=gnu99 -O1 -Isrc/core "$t" \
                 src/core/u8.c src/core/inflate.c src/core/zip.c src/core/sheet.c \
-                src/core/engine.c src/core/ac_keys.c src/core/import.c src/core/findimg.c \
+                src/core/engine.c src/core/ac_keys.c src/core/import.c src/core/findimg.c src/core/xls.c \
                 -o "/tmp/$name" 2> "/tmp/$name.err" \
                && "/tmp/$name" > "/tmp/$name.out" 2>&1; then
               echo "PASS $name"
@@ -54,7 +54,7 @@ jobs:
             if [ "$name" = "test_theme" ]; then continue; fi
             if gcc -std=gnu99 -O1 -g -fsanitize=address -Isrc/core "$t" \
                 src/core/u8.c src/core/inflate.c src/core/zip.c src/core/sheet.c \
-                src/core/engine.c src/core/ac_keys.c src/core/import.c src/core/findimg.c \
+                src/core/engine.c src/core/ac_keys.c src/core/import.c src/core/findimg.c src/core/xls.c \
                 -o "/tmp/$name.asan" 2> "/tmp/$name.asan.err"; then
               if ASAN_OPTIONS=detect_leaks=0 "/tmp/$name.asan" > "/tmp/$name.asan.out" 2>&1; then
                 echo "ASAN PASS $name"

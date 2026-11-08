@@ -165,6 +165,23 @@ int sheet_save_csv(const Sheet *s, const wchar_t *path)
     return 0;
 }
 
+/* 自动判型:OLE2 头→xls(BIFF8),PK 头→xlsx(首表),否则 CSV。
+   双端提取/导入入口统一走此函数,判型逻辑收敛到 core 一处 */
+int csv_parse(const unsigned char *data, size_t len,
+              char *(*gbk)(const char *, size_t), Sheet *out);   /* import.c */
+int sheet_parse_auto(const unsigned char *data, size_t len,
+                     char *(*gbk)(const char *, size_t), Sheet *out)
+{
+    if (data && len >= 4) {
+        if (data[0] == 'P' && data[1] == 'K')
+            return xlsx_parse_sheet(data, len, 0, out);
+        if (data[0] == 0xD0 && data[1] == 0xCF &&
+            data[2] == 0x11 && data[3] == 0xE0)
+            return xls_parse(data, len, gbk, out);
+    }
+    return csv_parse(data, len, gbk, out);   /* 前向声明于上 */
+}
+
 /* ---------------- XML 扫描工具 ---------------- */
 
 /* 查找下一个元素标签(跳过 <!-- 和 <?) */

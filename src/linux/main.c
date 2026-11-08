@@ -938,8 +938,8 @@ static void ex_on_dnd(XuiWin *w, const char *path, void *ud)
 {
     (void)w; (void)ud;
     const char *dot = strrchr(path, '.');
-    if (!dot || (strcasecmp(dot, ".xlsx") && strcasecmp(dot, ".csv") &&
-                 strcasecmp(dot, ".txt"))) {
+    if (!dot || (strcasecmp(dot, ".xlsx") && strcasecmp(dot, ".xls") &&
+                 strcasecmp(dot, ".csv") && strcasecmp(dot, ".txt"))) {
         show_info("\xe4\xbb\x85\xe6\x94\xaf\xe6\x8c\x81 .xlsx / .csv / .txt \xe6\x96\x87\xe4\xbb\xb6");  /* 仅支持 .xlsx/.csv/.txt 文件 */
         return;
     }
@@ -964,7 +964,7 @@ static void ex_pick(XuiWgt *btn, void *ud)
     char *p = xui_filesel(g_ui, g_ex.dlg, 0,
         which == 0 ? "\xe9\x80\x89\xe6\x8b\xa9\xe8\xa1\xa8A(\xe6\x95\xb0\xe6\x8d\xae\xe6\x9d\xa5\xe6\xba\x90)"   /* 选择表A(数据来源) */
                    : "\xe9\x80\x89\xe6\x8b\xa9\xe8\xa1\xa8B(\xe5\x88\x97\xe7\xbb\x93\xe6\x9e\x84\xe6\xa8\xa1\xe6\x9d\xbf)",  /* 选择表B(列结构模板) */
-        "xlsx,csv,txt", NULL);
+        "xlsx,xls,csv,txt", NULL);
     if (!p) return;
     if (which == 0) {
         snprintf(g_ex.pathA, sizeof(g_ex.pathA), "%s", p);
@@ -993,12 +993,8 @@ static void ex_go(XuiWgt *btn, void *ud)
     unsigned char *db = read_file_all_from_utf8(g_ex.pathB, &lb);
     int ok = 0;
     if (da && db) {
-        int ra = (la >= 4 && da[0] == 'P' && da[1] == 'K')
-                   ? xlsx_parse_sheet(da, la, 0, &a)
-                   : csv_parse(da, la, NULL, &a);
-        int rb = (lb >= 4 && db[0] == 'P' && db[1] == 'K')
-                   ? xlsx_parse_sheet(db, lb, 0, &b)
-                   : csv_parse(db, lb, NULL, &b);
+        int ra = sheet_parse_auto(da, la, NULL, &a);
+        int rb = sheet_parse_auto(db, lb, NULL, &b);
         if (ra == 0 && rb == 0 && a.rows >= 1 && b.rows >= 1) ok = 1;
     }
     free(da); free(db);

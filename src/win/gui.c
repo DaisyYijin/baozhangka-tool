@@ -1922,18 +1922,14 @@ static int do_extract_core(const wchar_t *pa, const wchar_t *pb, HWND owner)
     unsigned char *db = read_file_all(pb, &lb);
     int ok = 0;
     if (da && db) {
-        int ra = (la >= 4 && da[0] == 'P' && da[1] == 'K')
-                   ? xlsx_parse_sheet(da, la, 0, &a)
-                   : csv_parse(da, la, win_gbk_to_utf8, &a);
-        int rb = (lb >= 4 && db[0] == 'P' && db[1] == 'K')
-                   ? xlsx_parse_sheet(db, lb, 0, &b)
-                   : csv_parse(db, lb, win_gbk_to_utf8, &b);
+        int ra = sheet_parse_auto(da, la, win_gbk_to_utf8, &a);
+        int rb = sheet_parse_auto(db, lb, win_gbk_to_utf8, &b);
         if (ra == 0 && rb == 0 && a.rows >= 1 && b.rows >= 1) ok = 1;
     }
     free(da); free(db);
     if (!ok) {
         sheet_free(&a); sheet_free(&b);
-        MessageBoxW(owner, L"无法解析表格文件(需 xlsx 或 UTF-8/GBK 的 CSV)。",
+        MessageBoxW(owner, L"无法解析表格文件(需 xlsx/xls 或 UTF-8/GBK 的 CSV)。",
                     L"数据提取", MB_ICONINFORMATION);
         return 0;
     }
@@ -1972,12 +1968,12 @@ static int do_extract_core(const wchar_t *pa, const wchar_t *pb, HWND owner)
     return done;
 }
 
-/* 扩展名校验(xlsx/csv/txt) */
+/* 扩展名校验(xlsx/xls/csv/txt) */
 static int ex_valid_ext(const wchar_t *p)
 {
     const wchar_t *dot = wcsrchr(p, L'.');
-    return dot && (_wcsicmp(dot, L".xlsx") == 0 || _wcsicmp(dot, L".csv") == 0 ||
-                   _wcsicmp(dot, L".txt") == 0);
+    return dot && (_wcsicmp(dot, L".xlsx") == 0 || _wcsicmp(dot, L".xls") == 0 ||
+                   _wcsicmp(dot, L".csv") == 0 || _wcsicmp(dot, L".txt") == 0);
 }
 
 /* 槽绘制:虚线框+两行文字(提示/已选文件名) */
@@ -2092,7 +2088,7 @@ static LRESULT CALLBACK ex_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             memset(&ofn, 0, sizeof(ofn));
             ofn.lStructSize = sizeof(ofn);
             ofn.hwndOwner = hwnd;
-            ofn.lpstrFilter = L"表格文件 (*.xlsx;*.csv;*.txt) *.xlsx;*.csv;*.txt 所有文件 (*.*) *.* ";
+            ofn.lpstrFilter = L"表格文件 (*.xlsx;*.xls;*.csv;*.txt) *.xlsx;*.xls;*.csv;*.txt 所有文件 (*.*) *.* ";
             ofn.lpstrFile = p;
             ofn.nMaxFile = MAX_PATH;
             ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;

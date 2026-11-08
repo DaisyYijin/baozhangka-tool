@@ -26,6 +26,14 @@ int sheet_extract(const Sheet *a, const Sheet *b, Sheet *out);
 /* Sheet 写出 CSV(UTF-8 BOM+CRLF,Excel 双击可开);0=成功 */
 int sheet_save_csv(const Sheet *s, const wchar_t *path);
 
+/* Excel 97-2003 (.xls, BIFF8) 只读解析:第一个工作表的表头与数据。
+   gbk 与 csv_parse 同签名(8-bit 串降码,NULL 则 Latin1)。0=成功 */
+int xls_parse(const unsigned char *data, size_t len,
+              char *(*gbk)(const char *, size_t), Sheet *out);
+/* 自动判型:OLE2 头(D0 CF 11 E0)→xls,PK 头→xlsx(首表),否则 CSV */
+int sheet_parse_auto(const unsigned char *data, size_t len,
+                     char *(*gbk)(const char *, size_t), Sheet *out);
+
 /* 解析 .xlsx(zipped OOXML)。成功返回 0,使用第一个工作表。 */
 int xlsx_parse(const uint8_t *data, size_t size, Sheet *out);
 
