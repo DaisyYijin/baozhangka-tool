@@ -2160,7 +2160,7 @@ static void fl_do_extract(void)
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g_fl.hwnd;
-    ofn.lpstrFilter = L"CSV 文件 (*.csv) *.csv ";
+    ofn.lpstrFilter = L"CSV 文件 (*.csv)\0*.csv\0";
     ofn.lpstrFile = po;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
@@ -2260,7 +2260,7 @@ static LRESULT CALLBACK fl_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             memset(&ofn, 0, sizeof(ofn));
             ofn.lStructSize = sizeof(ofn);
             ofn.hwndOwner = hwnd;
-            ofn.lpstrFilter = L"表格文件 (*.xlsx;*.xls;*.csv;*.txt) *.xlsx;*.xls;*.csv;*.txt 所有文件 (*.*) *.* ";
+            ofn.lpstrFilter = L"表格文件 (*.xlsx;*.xls;*.csv;*.txt)\0*.xlsx;*.xls;*.csv;*.txt\0所有文件 (*.*)\0*.*\0";
             ofn.lpstrFile = p;
             ofn.nMaxFile = MAX_PATH;
             ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
