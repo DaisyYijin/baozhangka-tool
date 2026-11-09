@@ -1063,31 +1063,29 @@ static void on_extract(XuiWgt *btn, void *ud)
 }
 
 /* ===================== 筛选提取(多条件筛选表A → 按表B表头输出) ===================== */
-
 static struct {
     XuiWin *dlg;
     XuiWgt *lbA, *lbB;
-    XuiWgt *colCmb[3], *valCmb[3];
+    XuiWgt *condList;                  /* 已加条件列表(可滚动,数量不限) */
+    XuiWgt *colCmb, *valCmb;           /* 条件编辑行:列/值 */
     char pathA[1024], pathB[1024];
     Sheet shA, shB;
+    char *condCols[512], *condVals[512];
+    int nConds;
 } g_flt;
 
 static void flt_fill_cols(void)
 {
-    for (int i = 0; i < 3; i++) {
-        xui_combo_clear(g_flt.colCmb[i]);
-        xui_combo_clear(g_flt.valCmb[i]);
-        xui_combo_add(g_flt.colCmb[i], "(\xe4\xb8\x8d\xe7\xad\x9b)");   /* (不筛) */
-        xui_combo_set_active(g_flt.colCmb[i], 0);
-    }
+    xui_combo_clear(g_flt.colCmb);
+    xui_combo_clear(g_flt.valCmb);
+    xui_combo_add(g_flt.colCmb, "(\xe4\xb8\x8d\xe7\xad\x9b)");   /* (不筛) */
+    xui_combo_set_active(g_flt.colCmb, 0);
     if (g_flt.shA.rows >= 1 && g_flt.shA.cells && g_flt.shA.cells[0])
         for (int c = 0; c < g_flt.shA.cols; c++) {
             if (!g_flt.shA.cells[0][c]) continue;
-            for (int i = 0; i < 3; i++)
-                xui_combo_add(g_flt.colCmb[i], g_flt.shA.cells[0][c]);
+            xui_combo_add(g_flt.colCmb, g_flt.shA.cells[0][c]);
         }
 }
-
 static void flt_load_a(const char *path)
 {
     snprintf(g_flt.pathA, sizeof(g_flt.pathA), "%s", path);
@@ -1112,11 +1110,10 @@ static void flt_load_b(const char *path)
 /* 列选择变化 → 填该列去重值(前 500) */
 static void flt_on_col(XuiWgt *btn, void *ud)
 {
-    (void)btn;
-    int i = (int)(intptr_t)ud;
-    xui_combo_clear(g_flt.valCmb[i]);
-    const char *col = xui_combo_text(g_flt.colCmb[i]);
-    if (!col[0] || strcmp(col, "(\xe4\xb8\x8d\xe7\xad\x9b)") == 0) return;  /* (不筛) */
+    (void)btn; (void)ud;
+    xui_combo_clear(g_flt.valCmb);
+    const char *col = xui_combo_text(g_flt.colCmb);
+    if (!col[0] || strcmp(col, "(\xe4\xb8\x8d\xe7\xad\x9b)") == 0) return;
     int kc = -1;
     if (g_flt.shA.cells && g_flt.shA.cells[0])
         for (int c = 0; c < g_flt.shA.cols; c++)
@@ -1133,7 +1130,7 @@ static void flt_on_col(XuiWgt *btn, void *ud)
             if (strcmp(seen[k], v) == 0) { dup = 1; break; }
         if (dup) continue;
         seen[nSeen++] = v;
-        xui_combo_add(g_flt.valCmb[i], v);
+        xui_combo_add(g_flt.valCmb, v);
     }
 }
 
@@ -1177,21 +1174,61 @@ static void flt_pick(XuiWgt *btn, void *ud)
     free(p);
 }
 
+/* 「+ 添加」:编辑行列/值加入条件列表(数量不限) */
+static void flt_add_cond(XuiWgt *btn, void *ud)
+{
+    (void)btn; (void)ud;
+    const char *col = xui_combo_text(g_flt.colCmb);
+    const char *val = xui_combo_text(g_flt.valCmb);
+    if (col[0] && strcmp(col, "(\xe4\xb8\x8d\xe7\xad\x9b)") == 0) col = "";
+    if (!col[0] || !val[0]) {
+        show_info("\xe8\xaf\xb7\xe5\x85\x88\xe9\x80\x89\xe5\xa5\xbd\xe7\xad\x9b\xe9\x80\x89\xe5\x88\x97\xe4\xb8\x8e\xe5\x80\xbc\xe5\x86\x8d\xe6\xb7\xbb\xe5\x8a\xa0");
+        return;
+    }
+    if (g_flt.nConds >= 512) {
+        show_info("\xe6\x9d\xa1\xe4\xbb\xb6\xe5\xb7\xb2\xe8\xbe\xbe 512 \xe6\x9d\xa1\xe4\xb8\x8a\xe9\x99\x90");
+        return;
+    }
+    g_flt.condCols[g_flt.nConds] = strdup(col);
+    g_flt.condVals[g_flt.nConds] = strdup(val);
+    g_flt.nConds++;
+    xui_list_set_rows(g_flt.condList, g_flt.nConds);
+    xui_list_set(g_flt.condList, g_flt.nConds - 1, 0, col);
+    xui_list_set(g_flt.condList, g_flt.nConds - 1, 1, val);
+}
+
+/* 「删除选中」:移除列表选中行 */
+static void flt_del_cond(XuiWgt *btn, void *ud)
+{
+    (void)btn; (void)ud;
+    int sel = xui_list_sel(g_flt.condList);
+    if (sel < 0 || sel >= g_flt.nConds) {
+        show_info("\xe8\xaf\xb7\xe5\x85\x88\xe5\x9c\xa8\xe5\x88\x97\xe8\xa1\xa8\xe9\x80\x89\xe4\xb8\xad\xe8\xa6\x81\xe5\x88\xa0\xe9\x99\xa4\xe7\x9a\x84\xe6\x9d\xa1\xe4\xbb\xb6\xe8\xa1\x8c");
+        return;
+    }
+    free(g_flt.condCols[sel]);
+    free(g_flt.condVals[sel]);
+    for (int i = sel; i < g_flt.nConds - 1; i++) {
+        g_flt.condCols[i] = g_flt.condCols[i + 1];
+        g_flt.condVals[i] = g_flt.condVals[i + 1];
+    }
+    g_flt.nConds--;
+    xui_list_set_rows(g_flt.condList, g_flt.nConds);
+    for (int i = 0; i < g_flt.nConds; i++) {
+        xui_list_set(g_flt.condList, i, 0, g_flt.condCols[i]);
+        xui_list_set(g_flt.condList, i, 1, g_flt.condVals[i]);
+    }
+}
+
 /* 筛选(预览/提取共用);命中数,-2=未选表A,-1=列不存在 */
 static int flt_filter(Sheet *o)
 {
     if (g_flt.shA.rows < 1) return -2;
-    const char *cs[3], *vs[3];
-    static char dummy[1] = "";
-    for (int i = 0; i < 3; i++) {
-        cs[i] = xui_combo_text(g_flt.colCmb[i]);
-        vs[i] = xui_combo_text(g_flt.valCmb[i]);
-        if (strcmp(cs[i], "(\xe4\xb8\x8d\xe7\xad\x9b)") == 0) cs[i] = dummy;  /* (不筛)=空 */
-        if (!cs[i][0]) vs[i] = dummy;
-    }
-    return sheet_filter_rows_multi(&g_flt.shA, cs, vs, 3, o);
+    return sheet_filter_rows_multi(&g_flt.shA,
+                                   (const char *const *)g_flt.condCols,
+                                   (const char *const *)g_flt.condVals,
+                                   g_flt.nConds, o);
 }
-
 static void flt_preview(XuiWgt *btn, void *ud)
 {
     (void)btn; (void)ud;
@@ -1292,20 +1329,25 @@ static void on_filter(XuiWgt *btn, void *ud)
 
     xui_label(dlg, 24, 232, 420, 20,
               "\xe7\xad\x9b\xe9\x80\x89\xe6\x9d\xa1\xe4\xbb\xb6(\xe5\x90\x8c\xe6\x97\xb6\xe6\xbb\xa1\xe8\xb6\xb3;\xe7\x95\x99\xe7\xa9\xba=\xe4\xb8\x8d\xe7\xad\x9b;\xe5\x80\xbc\xe4\xb8\xba\xe5\x8c\x85\xe5\x90\xab\xe5\x8c\xb9\xe9\x85\x8d)");  /* 筛选条件(...) */
-    for (int i = 0; i < 3; i++) {
-        int y = 256 + i * 32;
-        g_flt.colCmb[i] = xui_combo(dlg, 24, y, 150, 24, flt_on_col, (void *)(intptr_t)i);
-        g_flt.valCmb[i] = xui_combo(dlg, 184, y, 252, 24, NULL, NULL);
-    }
-    xui_button(dlg, 24, 360, 140, 26,
-               "\xe9\xa2\x84\xe8\xa7\x88\xe7\xad\x9b\xe9\x80\x89\xe7\xbb\x93\xe6\x9e\x9c", flt_preview, NULL);  /* 预览筛选结果 */
-
+    int colW[2] = { 150, 240 };
+    g_flt.condList = xui_list_new(dlg, 24, 256, 412, 104, 2, colW);
+    xui_list_set_header(g_flt.condList, 0, "\xe7\xad\x9b\xe9\x80\x89\xe5\x88\x97");   /* 筛选列 */
+    xui_list_set_header(g_flt.condList, 1, "\xe5\x8c\x85\xe5\x90\xab\xe5\x80\xbc");   /* 包含值 */
+    g_flt.colCmb = xui_combo(dlg, 24, 370, 140, 24, flt_on_col, NULL);
+    g_flt.valCmb = xui_combo(dlg, 172, 370, 160, 24, NULL, NULL);
+    xui_button(dlg, 340, 368, 96, 26, "+ \xe6\xb7\xbb\xe5\x8a\xa0", flt_add_cond, NULL);
+    xui_button(dlg, 24, 402, 96, 24, "\xe5\x88\xa0\xe9\x99\xa4\xe9\x80\x89\xe4\xb8\xad", flt_del_cond, NULL);
+    xui_button(dlg, 130, 402, 110, 24, "\xe9\xa2\x84\xe8\xa7\x88\xe7\xad\x9b\xe9\x80\x89\xe7\xbb\x93\xe6\x9e\x9c", flt_preview, NULL);
     XuiWgt *bGo = xui_button(dlg, 236, 506, 96, 28,
                              "\xe5\xbc\x80\xe5\xa7\x8b\xe6\x8f\x90\xe5\x8f\x96", flt_go, NULL);  /* 开始提取 */
     XuiWgt *bClose = xui_button(dlg, 344, 506, 70, 28,
                                 "\xe5\x85\xb3\xe9\x97\xad", NULL, NULL);                        /* 关闭 */
     xui_window_set_default(dlg, bGo, bClose);
     xui_window_run(dlg);
+    for (int i = 0; i < g_flt.nConds; i++) {
+        free(g_flt.condCols[i]);
+        free(g_flt.condVals[i]);
+    }
     sheet_free(&g_flt.shA);
     sheet_free(&g_flt.shB);
     g_flt.dlg = NULL;
@@ -1645,8 +1687,7 @@ int main(int argc, char **argv)
     mk_btn(g_win, &bx, "\xe2\x86\x93", on_move, (void *)(intptr_t)1, 6);   /* ↓ */
     mk_btn(g_win, &bx, "\xe5\x8f\x96\xe7\x82\xb9", on_quick_pick, NULL, 6); /* 取点 */
     mk_btn(g_win, &bx, "\xe5\xaf\xbc\xe5\x85\xa5", on_import, NULL, 6);    /* 导入 */
-    mk_btn(g_win, &bx, "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96", on_extract, NULL, 6);  /* 数据提取 */
-    mk_btn(g_win, &bx, "\xe7\xad\x9b\xe9\x80\x89\xe6\x8f\x90\xe5\x8f\x96", on_filter, NULL, 6);  /* 筛选提取 */
+    mk_btn(g_win, &bx, "\xe6\x95\xb0\xe6\x8d\xae\xe6\x8f\x90\xe5\x8f\x96", on_filter, NULL, 6);  /* 数据提取(可选筛选) */
     mk_btn(g_win, &bx, "\xe4\xbf\x9d\xe5\xad\x98\xe4\xbb\xbb\xe5\x8a\xa1", on_save, NULL, 18); /* 保存任务 */
     g_btn_start = mk_btn(g_win, &bx, "\xe5\xbc\x80\xe5\xa7\x8b\xe6\x89\xa7\xe8\xa1\x8c(F6)", on_start, NULL, 8);
     g_btn_stop = mk_btn(g_win, &bx, "\xe5\x81\x9c\xe6\xad\xa2(Ctrl+F12)", on_stop, NULL, 0);

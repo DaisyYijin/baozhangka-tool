@@ -185,9 +185,10 @@ int sheet_parse_auto(const unsigned char *data, size_t len,
 int sheet_filter_rows_multi(const Sheet *src, const char *const *cols,
                             const char *const *vals, int n, Sheet *out)
 {
-    if (!src || !out || !src->cells || src->rows < 1 || src->cols < 1) return -1;
-    if (n > 8) n = 8;
-    int ci[8];
+    if (!src || !out || !src->cells || src->rows < 1 || src->cols < 1 || n < 0)
+        return -1;
+    int *ci = (int *)malloc(n > 0 ? (size_t)n * sizeof(int) : 1);
+    if (!ci) return -1;
     for (int i = 0; i < n; i++) {
         ci[i] = -1;                       /* 空列名/空值=该条件跳过 */
         if (cols[i] && cols[i][0] && vals[i] && vals[i][0]) {
@@ -195,7 +196,7 @@ int sheet_filter_rows_multi(const Sheet *src, const char *const *cols,
             for (int k = 0; k < src->cols; k++)
                 if (src->cells[0] && src->cells[0][k] &&
                     strcmp(src->cells[0][k], cols[i]) == 0) { found = k; break; }
-            if (found < 0) return -1;     /* 条件列不存在 */
+            if (found < 0) { free(ci); return -1; }   /* 条件列不存在 */
             ci[i] = found;
         }
     }
@@ -229,6 +230,7 @@ int sheet_filter_rows_multi(const Sheet *src, const char *const *cols,
         if (hit) FL_ADD_ROW(r);
     }
     #undef FL_ADD_ROW
+    free(ci);
     return out->rows - 1;                 /* 命中数据行数 */
 }
 

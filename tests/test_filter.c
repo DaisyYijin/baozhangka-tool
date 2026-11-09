@@ -95,6 +95,18 @@ int main(void)
         sheet_free(&o);
     }
 
+    /* ---- 4.5) 条件数无上限(>8 不截断) ---- */
+    {
+        Sheet o;
+        memset(&o, 0, sizeof(o));
+        const char *cs[12], *vs[12];
+        for (int i = 0; i < 12; i++) { cs[i] = "人员类别"; vs[i] = "父亲"; }
+        CHECK(sheet_filter_rows_multi(&a, cs, vs, 12, &o) == 2,
+              "12 个条件(>8)应仍命中 2 行(不截断)");
+        printf("== 条件数无上限(12 个>8) OK ==\n");
+        sheet_free(&o);
+    }
+
     /* ---- 5) 筛选 → 按表B表头提取 组合链路 ---- */
     {
         Sheet o;

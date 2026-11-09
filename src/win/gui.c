@@ -49,8 +49,7 @@ enum {
     IDC_BTN_HELP,
     IDC_BTN_SCHED,                  /* 定时执行设置 */
     IDC_BTN_SETTINGS,               /* 集中设置(主题色/快捷按钮/更多) */
-    IDC_BTN_EXTRACT,                /* 数据提取:按表B结构从表A取同名列 */
-    IDC_BTN_FILTER,                 /* 筛选提取:多条件筛选表A后按表B提取 */
+    IDC_BTN_EXTRACT,                /* 数据提取:可选多条件筛选,按表B结构从表A取同名列 */
     IDC_ED_LOOPS, IDC_ED_GAP, IDC_ED_COUNTDOWN, IDC_ED_JITTER,
     IDC_BTN_DATA,                 /* Excel 数据行绑定(保留枚举) */
     IDC_CHK_EXCELROWS,            /* 勾选:循环次数=Excel 行数 */
@@ -1897,78 +1896,6 @@ static int input_dlg(HWND owner, const wchar_t *title, const wchar_t *prompt,
     return g_idlg.okClicked;
 }
 
-/* ===================== 数据提取(独立窗口:拖拽/点击选表,双槽) ===================== */
-
-static struct {
-    HWND hwnd, btnGo, btnClose;
-    wchar_t pathA[MAX_PATH], pathB[MAX_PATH];
-    int done;
-} g_ex;
-
-#define EX_SLOT_X 24
-#define EX_SLOT_W 368
-#define EX_SLOT_H 70
-#define EX_SLOT_A_Y 42
-#define EX_SLOT_B_Y 146
-
-/* 解析+提取+保存(两表路径已定);1=成功 */
-static int do_extract_core(const wchar_t *pa, const wchar_t *pb, HWND owner)
-{
-    Sheet a, b, out;
-    memset(&a, 0, sizeof(a));
-    memset(&b, 0, sizeof(b));
-    memset(&out, 0, sizeof(out));
-    size_t la = 0, lb = 0;
-    unsigned char *da = read_file_all(pa, &la);
-    unsigned char *db = read_file_all(pb, &lb);
-    int ok = 0;
-    if (da && db) {
-        int ra = sheet_parse_auto(da, la, win_gbk_to_utf8, &a);
-        int rb = sheet_parse_auto(db, lb, win_gbk_to_utf8, &b);
-        if (ra == 0 && rb == 0 && a.rows >= 1 && b.rows >= 1) ok = 1;
-    }
-    free(da); free(db);
-    if (!ok) {
-        sheet_free(&a); sheet_free(&b);
-        MessageBoxW(owner, L"无法解析表格文件(需 xlsx/xls 或 UTF-8/GBK 的 CSV)。",
-                    L"数据提取", MB_ICONINFORMATION);
-        return 0;
-    }
-    sheet_extract(&a, &b, &out);
-
-    wchar_t po[MAX_PATH] = L"";
-    OPENFILENAMEW ofn;
-    memset(&ofn, 0, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = owner;
-    ofn.lpstrFilter = L"CSV 文件 (*.csv) *.csv ";
-    ofn.lpstrFile = po;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
-    ofn.lpstrTitle = L"数据提取 - 保存结果";
-    wcscpy(po, L"提取结果.csv");
-    if (!GetSaveFileNameW(&ofn)) {
-        sheet_free(&a); sheet_free(&b); sheet_free(&out);
-        return 0;
-    }
-    if (!wcsrchr(po, L'.')) wcscat(po, L".csv");
-    int done = 0;
-    if (sheet_save_csv(&out, po) == 0) {
-        wchar_t m[300];
-        _snwprintf(m, 299,
-            L"提取完成:%d 列 × %d 行(含表头)\n表B有而表A没有的列为空。\n已保存:\n%s",
-            out.cols, out.rows, po);
-        m[299] = 0;
-        log_add(L"数据提取:%d 列 × %d 行 → %s", out.cols, out.rows, po);
-        MessageBoxW(owner, m, L"数据提取", MB_ICONINFORMATION);
-        done = 1;
-    } else {
-        MessageBoxW(owner, L"保存文件失败。", L"提示", MB_ICONINFORMATION);
-    }
-    sheet_free(&a); sheet_free(&b); sheet_free(&out);
-    return done;
-}
-
 /* 扩展名校验(xlsx/xls/csv/txt) */
 static int ex_valid_ext(const wchar_t *p)
 {
@@ -1977,223 +1904,17 @@ static int ex_valid_ext(const wchar_t *p)
                    _wcsicmp(dot, L".csv") == 0 || _wcsicmp(dot, L".txt") == 0);
 }
 
-/* 槽绘制:虚线框+两行文字(提示/已选文件名) */
-static void ex_draw_slot(HDC dc, int y, const wchar_t *title, const wchar_t *path)
-{
-    /* 标题 */
-    SetTextColor(dc, RGB(0x2E,0x2E,0x2E));
-    HGDIOBJ of = SelectObject(dc, g_uiFontBold);
-    TextOutW(dc, EX_SLOT_X, y - 20, title, (int)wcslen(title));
-    SelectObject(dc, of);
-    /* 槽体 */
-    RECT rc = { EX_SLOT_X, y, EX_SLOT_X + EX_SLOT_W, y + EX_SLOT_H };
-    HBRUSH br = CreateSolidBrush(path[0] ? RGB(0xEF,0xF6,0xFF) : RGB(0xF7,0xF7,0xF7));
-    FillRect(dc, &rc, br);
-    DeleteObject(br);
-    HPEN pen = CreatePen(PS_DASH, 1, path[0] ? ThemeColor() : RGB(0xAA,0xAA,0xAA));
-    HGDIOBJ op = SelectObject(dc, pen);
-    HGDIOBJ ob = SelectObject(dc, GetStockObject(NULL_BRUSH));
-    Rectangle(dc, rc.left, rc.top, rc.right, rc.bottom);
-    SelectObject(dc, op);
-    SelectObject(dc, ob);
-    DeleteObject(pen);
-    /* 文字:已选=文件名(截断);未选=拖拽提示 */
-    SetBkMode(dc, TRANSPARENT);
-    of = SelectObject(dc, g_uiFont);
-    if (path[0]) {
-        const wchar_t *base = wcsrchr(path, L'\\');
-        base = base ? base + 1 : path;
-        wchar_t ln[80];
-        int bl = (int)wcslen(base);
-        if (bl > 38) { wcsncpy(ln, base, 35); wcscpy(ln + 35, L"..."); }
-        else wcscpy(ln, base);
-        SetTextColor(dc, RGB(0x1B,0x1B,0x1B));
-        TextOutW(dc, EX_SLOT_X + 14, y + 10, ln, (int)wcslen(ln));
-        SetTextColor(dc, RGB(0x8A,0x8A,0x8A));
-        TextOutW(dc, EX_SLOT_X + 14, y + 34, L"可拖入其他文件替换,或点击重新选择", 17);
-    } else {
-        SetTextColor(dc, RGB(0x8A,0x8A,0x8A));
-        TextOutW(dc, EX_SLOT_X + 14, y + 12, L"拖拽文件到此处,或点击选择", 13);
-        TextOutW(dc, EX_SLOT_X + 14, y + 34, L"(支持 xlsx / csv / txt)", 12);
-    }
-    SelectObject(dc, of);
-}
-
-static LRESULT CALLBACK ex_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
-{
-    switch (msg) {
-    case WM_ERASEBKGND:
-        return 1;
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        HDC dc = BeginPaint(hwnd, &ps);
-        RECT rc;
-        GetClientRect(hwnd, &rc);
-        HBRUSH br = CreateSolidBrush(CARD_BG);
-        FillRect(dc, &rc, br);
-        DeleteObject(br);
-        ex_draw_slot(dc, EX_SLOT_A_Y, L"表A(数据来源)", g_ex.pathA);
-        ex_draw_slot(dc, EX_SLOT_B_Y, L"表B(列结构模板)", g_ex.pathB);
-        EndPaint(hwnd, &ps);
-        return 0;
-    }
-    case WM_DROPFILES: {
-        HDROP h = (HDROP)wp;
-        POINT pt;
-        UINT n = DragQueryFileW(h, 0xFFFFFFFF, NULL, 0);
-        DragQueryPoint(h, &pt);
-        if (n >= 2 && !g_ex.pathA[0] && !g_ex.pathB[0]) {
-            /* 一次拖入多个文件且两槽都空:第1个→表A,第2个→表B */
-            wchar_t f0[MAX_PATH] = L"", f1[MAX_PATH] = L"";
-            DragQueryFileW(h, 0, f0, MAX_PATH);
-            DragQueryFileW(h, 1, f1, MAX_PATH);
-            if (ex_valid_ext(f0) && ex_valid_ext(f1)) {
-                wcscpy(g_ex.pathA, f0);
-                wcscpy(g_ex.pathB, f1);
-                MessageBoxW(hwnd,
-                    L"已自动分配:\n第 1 个文件 → 表A,第 2 个文件 → 表B。",
-                    L"数据提取", MB_ICONINFORMATION);
-            } else {
-                MessageBoxW(hwnd, L"仅支持拖入 .xlsx / .csv / .txt 文件。",
-                            L"提示", MB_ICONINFORMATION);
-            }
-        } else {
-            wchar_t dpath[MAX_PATH] = L"";
-            if (DragQueryFileW(h, 0, dpath, MAX_PATH) > 0) {
-                if (ex_valid_ext(dpath)) {
-                    if (pt.y >= EX_SLOT_A_Y && pt.y < EX_SLOT_A_Y + EX_SLOT_H)
-                        wcscpy(g_ex.pathA, dpath);
-                    else if (pt.y >= EX_SLOT_B_Y && pt.y < EX_SLOT_B_Y + EX_SLOT_H)
-                        wcscpy(g_ex.pathB, dpath);
-                    else
-                        MessageBoxW(hwnd, L"请把文件拖到「表A」或「表B」框内。",
-                                    L"提示", MB_ICONINFORMATION);
-                } else {
-                    MessageBoxW(hwnd, L"仅支持拖入 .xlsx / .csv / .txt 文件。",
-                                L"提示", MB_ICONINFORMATION);
-                }
-            }
-        }
-        DragFinish(h);
-        InvalidateRect(hwnd, NULL, FALSE);
-        return 0;
-    }
-    case WM_LBUTTONUP: {                 /* 点击槽区 = 浏览选择(保留原方式) */
-        int y = GET_Y_LPARAM(lp);
-        int which = -1;
-        if (y >= EX_SLOT_A_Y && y < EX_SLOT_A_Y + EX_SLOT_H) which = 0;
-        if (y >= EX_SLOT_B_Y && y < EX_SLOT_B_Y + EX_SLOT_H) which = 1;
-        if (which >= 0) {
-            wchar_t p[MAX_PATH] = L"";
-            OPENFILENAMEW ofn;
-            memset(&ofn, 0, sizeof(ofn));
-            ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner = hwnd;
-            ofn.lpstrFilter = L"表格文件 (*.xlsx;*.xls;*.csv;*.txt) *.xlsx;*.xls;*.csv;*.txt 所有文件 (*.*) *.* ";
-            ofn.lpstrFile = p;
-            ofn.nMaxFile = MAX_PATH;
-            ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
-            ofn.lpstrTitle = which == 0 ? L"选择表A(数据来源)" : L"选择表B(列结构模板)";
-            if (GetOpenFileNameW(&ofn)) {
-                if (which == 0) wcscpy(g_ex.pathA, p);
-                else            wcscpy(g_ex.pathB, p);
-                InvalidateRect(hwnd, NULL, FALSE);
-            }
-        }
-        return 0;
-    }
-    case WM_COMMAND: {
-        int id = LOWORD(wp);
-        if (id == 1) {                   /* 开始提取 */
-            if (!g_ex.pathA[0] || !g_ex.pathB[0]) {
-                MessageBoxW(hwnd,
-                    L"请先指定表A与表B:\n拖拽文件到对应框,或点击框选择。",
-                    L"提示", MB_ICONINFORMATION);
-                return 0;
-            }
-            do_extract_core(g_ex.pathA, g_ex.pathB, hwnd);
-        } else if (id == 2) {            /* 关闭 */
-            g_ex.done = 1;
-        }
-        return 0;
-    }
-    case WM_CLOSE:
-        g_ex.done = 1;
-        return 0;
-    }
-    return DefWindowProcW(hwnd, msg, wp, lp);
-}
-
-static void on_extract(void)
-{
-    static int registered = 0;
-    if (!registered) {
-        WNDCLASSW wc;
-        memset(&wc, 0, sizeof(wc));
-        wc.lpfnWndProc = ex_wndproc;
-        wc.hInstance = GetModuleHandleW(NULL);
-        wc.lpszClassName = L"AcExtractDlg";
-        wc.style = CS_HREDRAW | CS_VREDRAW;
-        wc.hCursor = LoadCursorW(NULL, (LPCWSTR)IDC_ARROW);
-        wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
-        RegisterClassW(&wc);
-        registered = 1;
-    }
-    memset(&g_ex, 0, sizeof(g_ex));
-    RECT rcO;
-    GetWindowRect(g_hMain, &rcO);
-    int cx = rcO.left + ((rcO.right - rcO.left) - 420) / 2;
-    int cy = rcO.top + ((rcO.bottom - rcO.top) - 300) / 2;
-    g_ex.hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME, L"AcExtractDlg",
-        L"数据提取(拖入表A与表B)",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        cx, cy, 420, 334, g_hMain, NULL, GetModuleHandleW(NULL), NULL);
-    if (!g_ex.hwnd) return;
-    g_ex.btnGo = CreateWindowExW(0, L"BUTTON", L"开始提取",
-        WS_CHILD | WS_VISIBLE, 200, 254, 90, 30,
-        g_ex.hwnd, (HMENU)1, NULL, NULL);
-    g_ex.btnClose = CreateWindowExW(0, L"BUTTON", L"关闭",
-        WS_CHILD | WS_VISIBLE, 302, 254, 70, 30,
-        g_ex.hwnd, (HMENU)2, NULL, NULL);
-    if (g_uiFont) {
-        SendMessageW(g_ex.btnGo, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
-        SendMessageW(g_ex.btnClose, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
-    }
-    DragAcceptFiles(g_ex.hwnd, TRUE);    /* 整窗接收,按落点分表A/表B */
-    /* 直显(不用 AnimateWindow:AW_BLEND 不产生无效区,配合 WM_ERASEBKGND 拦截
-       会导致 WM_PAINT 不触发、客户区停留未初始化的黑色内存) */
-    ShowWindow(g_ex.hwnd, SW_SHOW);
-    InvalidateRect(g_ex.hwnd, NULL, TRUE);   /* 强制全客户区无效→WM_PAINT 全量绘制 */
-    UpdateWindow(g_ex.hwnd);
-    EnableWindow(g_hMain, FALSE);
-    g_uiDlgActive = 1;
-    MSG msg;
-    while (!g_ex.done) {
-        if (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
-            if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) break;
-            if (msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN) {
-                PostMessageW(g_ex.hwnd, WM_COMMAND, MAKEWPARAM(1, 0), 0);
-                continue;
-            }
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        } else {
-            WaitMessage();
-        }
-    }
-    g_uiDlgActive = 0;
-    EnableWindow(g_hMain, TRUE);
-    DestroyWindow(g_ex.hwnd);
-    SetForegroundWindow(g_hMain);
-}
 
 /* ===================== 筛选提取(多条件筛选表A → 按表B表头输出) ===================== */
 
 static struct {
-    HWND hwnd, btnGo, btnClose, btnPrev, prevEdt;
-    HWND colCmb[3], valCmb[3];
+    HWND hwnd, btnGo, btnClose, btnAdd, btnDel, btnPrev;
+    HWND condList;                     /* 已加条件列表(可滚动,数量不限) */
+    HWND colCmb, valCmb;               /* 条件编辑行:列/值 */
     wchar_t pathA[MAX_PATH], pathB[MAX_PATH];
-    Sheet shA, shB;                     /* 解析缓存 */
+    Sheet shA, shB;                    /* 解析缓存 */
+    char *condCols[512], *condVals[512];
+    int nConds, capConds;
     int done;
 } g_fl;
 
@@ -2253,19 +1974,16 @@ static void fl_load_a(const wchar_t *path)
         sheet_parse_auto(d, len, win_gbk_to_utf8, &g_fl.shA);
         free(d);
     }
-    for (int i = 0; i < 3; i++) {
-        SendMessageW(g_fl.colCmb[i], CB_RESETCONTENT, 0, 0);
-        SendMessageW(g_fl.valCmb[i], CB_RESETCONTENT, 0, 0);
-        SendMessageW(g_fl.colCmb[i], CB_ADDSTRING, 0, (LPARAM)L"(不筛)");
-        SendMessageW(g_fl.colCmb[i], CB_SETCURSEL, 0, 0);
-    }
+    SendMessageW(g_fl.colCmb, CB_RESETCONTENT, 0, 0);
+    SendMessageW(g_fl.valCmb, CB_RESETCONTENT, 0, 0);
+    SendMessageW(g_fl.colCmb, CB_ADDSTRING, 0, (LPARAM)L"(不筛)");
+    SendMessageW(g_fl.colCmb, CB_SETCURSEL, 0, 0);
     if (g_fl.shA.rows >= 1 && g_fl.shA.cells && g_fl.shA.cells[0])
         for (int c = 0; c < g_fl.shA.cols; c++) {
             if (!g_fl.shA.cells[0][c]) continue;
             wchar_t w[128];
             u8_to_wcs(g_fl.shA.cells[0][c], w, 127);
-            for (int i = 0; i < 3; i++)
-                SendMessageW(g_fl.colCmb[i], CB_ADDSTRING, 0, (LPARAM)w);
+            SendMessageW(g_fl.colCmb, CB_ADDSTRING, 0, (LPARAM)w);
         }
 }
 
@@ -2284,11 +2002,11 @@ static void fl_load_b(const wchar_t *path)
 }
 
 /* 列选择变化 → 填该列去重值(前 500,直接引用缓存内存) */
-static void fl_fill_vals(int i)
+static void fl_fill_vals(void)
 {
-    SendMessageW(g_fl.valCmb[i], CB_RESETCONTENT, 0, 0);
+    SendMessageW(g_fl.valCmb, CB_RESETCONTENT, 0, 0);
     wchar_t col[128] = L"";
-    GetWindowTextW(g_fl.colCmb[i], col, 127);
+    GetWindowTextW(g_fl.colCmb, col, 127);
     if (!col[0] || wcscmp(col, L"(不筛)") == 0) return;
     char cu[256];
     wcs_to_u8(col, cu, 255);
@@ -2310,26 +2028,76 @@ static void fl_fill_vals(int i)
         seen[nSeen++] = v;
         wchar_t w[128];
         u8_to_wcs(v, w, 127);
-        SendMessageW(g_fl.valCmb[i], CB_ADDSTRING, 0, (LPARAM)w);
+        SendMessageW(g_fl.valCmb, CB_ADDSTRING, 0, (LPARAM)w);
     }
+}
+
+/* 「+添加」:把编辑行的列/值加入条件列表(数量不限,列表可滚动) */
+static void fl_add_cond(void)
+{
+    wchar_t wc[128] = L"", wv[128] = L"";
+    GetWindowTextW(g_fl.colCmb, wc, 127);
+    GetWindowTextW(g_fl.valCmb, wv, 127);
+    if (wcscmp(wc, L"(不筛)") == 0) wc[0] = 0;
+    if (!wc[0] || !wv[0]) {
+        MessageBoxW(g_fl.hwnd,
+            L"请先在下方条件行选好「筛选列」和「值」,再点「+ 添加」。",
+            L"提示", MB_ICONINFORMATION);
+        return;
+    }
+    if (g_fl.nConds >= 512) {
+        MessageBoxW(g_fl.hwnd, L"条件已达 512 条上限。", L"提示", MB_ICONINFORMATION);
+        return;
+    }
+    char cu[128], cv[128];
+    wcs_to_u8(wc, cu, 127);
+    wcs_to_u8(wv, cv, 127);
+    g_fl.condCols[g_fl.nConds] = strdup(cu);
+    g_fl.condVals[g_fl.nConds] = strdup(cv);
+    g_fl.nConds++;
+    LVITEMW lvi;
+    memset(&lvi, 0, sizeof(lvi));
+    lvi.mask = LVIF_TEXT;
+    lvi.iItem = g_fl.nConds - 1;
+    lvi.pszText = wc;
+    int idx = (int)SendMessageW(g_fl.condList, LVM_INSERTITEMW, 0, (LPARAM)&lvi);
+    LVITEMW sub;
+    memset(&sub, 0, sizeof(sub));
+    sub.mask = LVIF_TEXT;
+    sub.iItem = idx;
+    sub.iSubItem = 1;
+    sub.pszText = wv;
+    SendMessageW(g_fl.condList, LVM_SETITEMW, 0, (LPARAM)&sub);
+}
+
+/* 「删除选中」:移除列表选中行 */
+static void fl_del_cond(void)
+{
+    int sel = (int)SendMessageW(g_fl.condList, LVM_GETNEXTITEM, (WPARAM)-1,
+                                MAKELPARAM(LVNI_SELECTED, 0));
+    if (sel < 0) {
+        MessageBoxW(g_fl.hwnd, L"请先在列表中选中要删除的条件行。",
+                    L"提示", MB_ICONINFORMATION);
+        return;
+    }
+    free(g_fl.condCols[sel]);
+    free(g_fl.condVals[sel]);
+    for (int i = sel; i < g_fl.nConds - 1; i++) {
+        g_fl.condCols[i] = g_fl.condCols[i + 1];
+        g_fl.condVals[i] = g_fl.condVals[i + 1];
+    }
+    g_fl.nConds--;
+    SendMessageW(g_fl.condList, LVM_DELETEITEM, (WPARAM)sel, 0);
 }
 
 /* 筛选(预览/提取共用);返回命中行数,-2=未选表A,-1=条件列不存在 */
 static int fl_do_filter(Sheet *o)
 {
     if (g_fl.shA.rows < 1) return -2;
-    char cols[3][128] = { { 0 } }, vals[3][128] = { { 0 } };
-    for (int i = 0; i < 3; i++) {
-        wchar_t wc[128] = L"", wv[128] = L"";
-        GetWindowTextW(g_fl.colCmb[i], wc, 127);
-        GetWindowTextW(g_fl.valCmb[i], wv, 127);
-        if (wcscmp(wc, L"(不筛)") == 0) wc[0] = 0;
-        wcs_to_u8(wc, cols[i], 127);
-        wcs_to_u8(wv, vals[i], 127);
-    }
-    const char *cs[3] = { cols[0], cols[1], cols[2] };
-    const char *vs[3] = { vals[0], vals[1], vals[2] };
-    return sheet_filter_rows_multi(&g_fl.shA, cs, vs, 3, o);
+    return sheet_filter_rows_multi(&g_fl.shA,
+                                   (const char *const *)g_fl.condCols,
+                                   (const char *const *)g_fl.condVals,
+                                   g_fl.nConds, o);
 }
 
 static void fl_do_preview(void)
@@ -2358,7 +2126,7 @@ static void fl_do_preview(void)
             if (wcslen(txt) + wcslen(ln) < 2000) wcscat(txt, ln);
         }
     }
-    SetWindowTextW(g_fl.prevEdt, txt);
+    MessageBoxW(g_fl.hwnd, txt, L"预览筛选结果", MB_ICONINFORMATION);
     sheet_free(&o);
 }
 
@@ -2437,7 +2205,7 @@ static LRESULT CALLBACK fl_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         HGDIOBJ of = SelectObject(dc, g_uiFont);
         SetTextColor(dc, RGB(0x2E,0x2E,0x2E));
         TextOutW(dc, FL_SLOT_X, 222,
-                 L"筛选条件(同时满足;留空=不筛;值为包含匹配)", 22);
+                 L"筛选条件(全部同时满足;值为包含匹配;可添加任意多条)", 25);
         SelectObject(dc, of);
         EndPaint(hwnd, &ps);
         return 0;
@@ -2507,13 +2275,15 @@ static LRESULT CALLBACK fl_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_COMMAND: {
         int id = LOWORD(wp), code = HIWORD(wp);
-        if (code == CBN_SELCHANGE && id >= 10 && id <= 12) {
-            fl_fill_vals(id - 10);
+        if (code == CBN_SELCHANGE && id == 10) {
+            fl_fill_vals();
             return 0;
         }
         if (id == 1) fl_do_extract();
         else if (id == 2) g_fl.done = 1;
         else if (id == 3) fl_do_preview();
+        else if (id == 4) fl_add_cond();
+        else if (id == 5) fl_del_cond();
         return 0;
     }
     case WM_CLOSE:
@@ -2544,39 +2314,54 @@ static void on_filter(void)
     int cx = rcO.left + ((rcO.right - rcO.left) - 460) / 2;
     int cy = rcO.top + ((rcO.bottom - rcO.top) - 560) / 2;
     g_fl.hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME, L"AcFilterDlg",
-        L"筛选提取(拖入表A与表B,可多条件筛选)",
+        L"数据提取(拖入表A与表B,可选多条件筛选)",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        cx, cy, 460, 560, g_hMain, NULL, GetModuleHandleW(NULL), NULL);
+        cx, cy, 460, 576, g_hMain, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_fl.hwnd) return;
-    /* 3 行条件:列下拉(只选)+值下拉(可选可输) */
-    for (int i = 0; i < 3; i++) {
-        int y = 240 + i * 32;
-        g_fl.colCmb[i] = CreateWindowExW(0, L"COMBOBOX", L"",
-            WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
-            24, y, 150, 240, g_fl.hwnd, (HMENU)(INT_PTR)(10 + i), NULL, NULL);
-        g_fl.valCmb[i] = CreateWindowExW(0, L"COMBOBOX", L"",
-            WS_CHILD | WS_VISIBLE | CBS_DROPDOWN | WS_VSCROLL,
-            184, y, 252, 240, g_fl.hwnd, (HMENU)(INT_PTR)(20 + i), NULL, NULL);
-        if (g_uiFont) {
-            SendMessageW(g_fl.colCmb[i], WM_SETFONT, (WPARAM)g_uiFont, TRUE);
-            SendMessageW(g_fl.valCmb[i], WM_SETFONT, (WPARAM)g_uiFont, TRUE);
-        }
-    }
+    /* 条件列表(ListView 可滚动,数量不限) */
+    g_fl.condList = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
+        WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER,
+        24, 236, 412, 124, g_fl.hwnd, NULL, NULL, NULL);
+    SendMessageW(g_fl.condList, LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
+                 LVS_EX_FULLROWSELECT);
+    LVCOLUMNW lvc;
+    memset(&lvc, 0, sizeof(lvc));
+    lvc.mask = LVCF_TEXT | LVCF_WIDTH;
+    lvc.pszText = (LPWSTR)L"筛选列";
+    lvc.cx = 180;
+    SendMessageW(g_fl.condList, LVM_INSERTCOLUMNW, 0, (LPARAM)&lvc);
+    lvc.pszText = (LPWSTR)L"包含值";
+    lvc.cx = 210;
+    SendMessageW(g_fl.condList, LVM_INSERTCOLUMNW, 1, (LPARAM)&lvc);
+    /* 条件编辑行:列+值+添加 */
+    g_fl.colCmb = CreateWindowExW(0, L"COMBOBOX", L"",
+        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
+        24, 370, 140, 240, g_fl.hwnd, (HMENU)10, NULL, NULL);
+    g_fl.valCmb = CreateWindowExW(0, L"COMBOBOX", L"",
+        WS_CHILD | WS_VISIBLE | CBS_DROPDOWN | WS_VSCROLL,
+        172, 370, 160, 240, g_fl.hwnd, (HMENU)11, NULL, NULL);
+    g_fl.btnAdd = CreateWindowExW(0, L"BUTTON", L"+ 添加",
+        WS_CHILD | WS_VISIBLE, 340, 368, 96, 26,
+        g_fl.hwnd, (HMENU)4, NULL, NULL);
+    g_fl.btnDel = CreateWindowExW(0, L"BUTTON", L"删除选中",
+        WS_CHILD | WS_VISIBLE, 24, 402, 90, 24,
+        g_fl.hwnd, (HMENU)5, NULL, NULL);
     g_fl.btnPrev = CreateWindowExW(0, L"BUTTON", L"预览筛选结果",
-        WS_CHILD | WS_VISIBLE, 24, 344, 120, 28,
+        WS_CHILD | WS_VISIBLE, 130, 402, 110, 24,
         g_fl.hwnd, (HMENU)3, NULL, NULL);
-    g_fl.prevEdt = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
-        WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY | WS_VSCROLL,
-        24, 380, 412, 112, g_fl.hwnd, NULL, NULL, NULL);
     g_fl.btnGo = CreateWindowExW(0, L"BUTTON", L"开始提取",
-        WS_CHILD | WS_VISIBLE, 236, 504, 96, 30,
+        WS_CHILD | WS_VISIBLE, 236, 506, 96, 30,
         g_fl.hwnd, (HMENU)1, NULL, NULL);
     g_fl.btnClose = CreateWindowExW(0, L"BUTTON", L"关闭",
-        WS_CHILD | WS_VISIBLE, 344, 504, 70, 30,
+        WS_CHILD | WS_VISIBLE, 344, 506, 70, 30,
         g_fl.hwnd, (HMENU)2, NULL, NULL);
     if (g_uiFont) {
+        SendMessageW(g_fl.condList, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+        SendMessageW(g_fl.colCmb, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+        SendMessageW(g_fl.valCmb, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+        SendMessageW(g_fl.btnAdd, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+        SendMessageW(g_fl.btnDel, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
         SendMessageW(g_fl.btnPrev, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
-        SendMessageW(g_fl.prevEdt, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
         SendMessageW(g_fl.btnGo, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
         SendMessageW(g_fl.btnClose, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
     }
@@ -2602,6 +2387,10 @@ static void on_filter(void)
     }
     g_uiDlgActive = 0;
     EnableWindow(g_hMain, TRUE);
+    for (int i = 0; i < g_fl.nConds; i++) {
+        free(g_fl.condCols[i]);
+        free(g_fl.condVals[i]);
+    }
     sheet_free(&g_fl.shA);
     sheet_free(&g_fl.shB);
     DestroyWindow(g_fl.hwnd);
@@ -3040,7 +2829,6 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 { L"定时",     IDC_BTN_SCHED },
                 { L"设置",     IDC_BTN_SETTINGS },
                 { L"数据提取", IDC_BTN_EXTRACT },
-                { L"筛选提取", IDC_BTN_FILTER },
             };
             int ny = 14 + (NAV_BTN_H + 6) * 2 + 12;   /* 分隔区之后(任务/日志两页签) */
             int navN = (int)(sizeof(nav) / sizeof(nav[0]));
@@ -3457,9 +3245,6 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             return 0;
         case IDC_BTN_EXTRACT:
-            on_extract();
-            return 0;
-        case IDC_BTN_FILTER:
             on_filter();
             return 0;
         case IDC_BTN_LOGCLEAR:
