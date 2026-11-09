@@ -2956,7 +2956,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         ShowWindow(GetDlgItem(hwnd, IDC_CHK_AUTOSCROLL), SW_HIDE);
 
         refresh_list();
-        log_add(L"程序启动 · 点击助手 v1.6.0(Windows XP~Win11)");
+        log_add(L"程序启动 · 点击助手 v1.7.0(Windows XP~Win11)");
         return 0;
     }
 
@@ -3358,7 +3358,7 @@ static LRESULT CALLBACK main_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case M_HELP:  show_help(); return 0;
         case M_ABOUT:
             MessageBoxW(hwnd,
-                L"点击助手 v1.6.0\n支持 Windows XP / 7 / 8 / 10 / 11(32/64 位)\n\n"
+                L"点击助手 v1.7.0\n支持 Windows XP / 7 / 8 / 10 / 11(32/64 位)\n\n"
                 L"功能:屏幕取点、单击/双击/多击、右击/中击、文本输入、\n"
                 L"组合键、滚轮、拖动、Excel 导入步骤与输入列、运行日志\n\n"
                 L"单文件绿色软件,无需安装。",
