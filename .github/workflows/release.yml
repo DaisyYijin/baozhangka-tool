@@ -77,8 +77,13 @@ jobs:
           DISPLAY=:99 ./dist/baozhangka-tool >/tmp/app.log 2>&1 &
           APP=$!
           sleep 4
+          if ! grep -q "entering main loop" /tmp/app.log; then
+            echo "FATAL: 未进入主循环(初始化阶段卡住或崩溃)"
+            cat /tmp/app.log
+            exit 1
+          fi
           if kill -0 $APP 2>/dev/null; then
-            echo "程序存活 4s OK"
+            echo "程序存活 4s OK(已进入主循环)"
             xwininfo -root -children 2>/dev/null | head -15 || true
             kill $APP 2>/dev/null || true
           else

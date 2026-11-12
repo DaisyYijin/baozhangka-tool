@@ -1707,7 +1707,18 @@ XUi *xui_open(void)
     ui->aXdndUri    = XInternAtom(ui->dpy, "text/uri-list", False);
     ui->aDndProp    = XInternAtom(ui->dpy, "XUI_DND_DATA", False);
     ui->aTextPlain= XInternAtom(ui->dpy, "text/plain;charset=utf-8", False);
-    ui->im = XOpenIM(ui->dpy, NULL, NULL, NULL);
+    /* 输入法(XIM)默认禁用:ARM/Linux 实机(如银河麒麟 ARM64)上 XIM 服务异常时
+       XOpenIM/XCreateIC 会同步阻塞——主窗已创建(白屏)而主线程卡死(关不掉)。
+       需要中文输入法时:设置环境变量 CLICK_TOOL_ENABLE_IM=1 后再启动。 */
+    ui->im = NULL;
+    {
+        const char *imen = getenv("CLICK_TOOL_ENABLE_IM");
+        if (imen && imen[0] && imen[0] != '0') {
+            ui->im = XOpenIM(ui->dpy, NULL, NULL, NULL);
+            fprintf(stderr, ui->im ? "[click-tool] XIM enabled\n"
+                                   : "[click-tool] XIM unavailable, entry uses XLookupString\n");
+        }
+    }
     if (pipe(ui->fdWake) == 0) {
         for (int i = 0; i < 2; i++) {
             int fl = fcntl(ui->fdWake[i], F_GETFL, 0);

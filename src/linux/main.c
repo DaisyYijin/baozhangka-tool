@@ -1659,6 +1659,7 @@ int main(int argc, char **argv)
     g_win = xui_window_new(g_ui, 1020, 660,
                            "\xe7\x82\xb9\xe5\x87\xbb\xe5\x8a\xa9\xe6\x89\x8b(Linux)"
                            " - Excel \xe5\xaf\xbc\xe5\x85\xa5 \xc2\xb7 \xe8\xbe\x93\xe5\x85\xa5\xe5\x89\x8d\xe6\xb8\x85\xe7\xa9\xba");
+    fprintf(stderr, "[click-tool] main window created\n");
     xui_window_set_close(g_win, on_close, NULL);
 
     /* 设置区 */
@@ -1719,6 +1720,7 @@ int main(int argc, char **argv)
         xui_grab_keys(g_ui, (KeySym)ls_hot_ks(i), ls_mod_to_x(ls_hot_mod(i)));
 
     xui_window_show(g_win);
+    fprintf(stderr, "[click-tool] entering main loop\n");
 
     /* 主循环:事件 + 50ms 周期任务(剪贴板通道/完成检测) */
     while (!xui_should_quit(g_ui)) {
