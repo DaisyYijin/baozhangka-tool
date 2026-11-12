@@ -17,8 +17,8 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "FileDescription",  "点击助手"
-            VALUE "InternalName",     "BaoZhangKaTool"
-            VALUE "OriginalFilename", "BaoZhangKaTool.exe"
+            VALUE "InternalName",     "ClickAssistant"
+            VALUE "OriginalFilename", "ClickAssistant.exe"
             VALUE "ProductName",      "点击助手"
             VALUE "FileVersion",      "1.0.0.0"
             VALUE "ProductVersion",   "1.0.0.0"

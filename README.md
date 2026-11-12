@@ -9,10 +9,10 @@
 
 | Release 产物 | 系统 | 架构 | 说明 |
 |---|---|---|---|
-| `baozhangka-tool-windows-xp-x86.zip` | **Windows XP SP3** ~ Win11 | x86(32 位) | 零依赖单文件 exe,Win7/10/11 的 32/64 位通用 |
-| `baozhangka-tool-linux-x86_64.tar.gz` | Linux(桌面发行版) | x86_64 / AMD64 | **零依赖**(仅 X11 桌面自带的 libX11 + libXtst) |
-| `baozhangka-tool-linux-arm64.tar.gz` | Linux | **ARM64 / aarch64**(树莓派 4/5、ARM 小主机、国产 ARM 平台如银河麒麟 V10) | 原生编译,glibc 2.17 基线 |
-| `baozhangka-tool-linux-armhf.tar.gz` | Linux | ARM32 / armhf(树莓派 3 等 32 位系统) | 原生编译 |
+| `click-assistant-windows-xp-x86.zip` | **Windows XP SP3** ~ Win11 | x86(32 位) | 零依赖单文件 exe,Win7/10/11 的 32/64 位通用 |
+| `click-assistant-linux-x86_64.tar.gz` | Linux(桌面发行版) | x86_64 / AMD64 | **零依赖**(仅 X11 桌面自带的 libX11 + libXtst) |
+| `click-assistant-linux-arm64.tar.gz` | Linux | **ARM64 / aarch64**(树莓派 4/5、ARM 小主机、国产 ARM 平台如银河麒麟 V10) | 原生编译,glibc 2.17 基线 |
+| `click-assistant-linux-armhf.tar.gz` | Linux | ARM32 / armhf(树莓派 3 等 32 位系统) | 原生编译 |
 
 > **Windows on ARM(Surface Pro X /骁龙本)**:直接使用 `windows-xp-x86` 版,
 > Win11 ARM 的内置 x86 模拟即可运行,无需单独的 ARM64 版本。
@@ -87,7 +87,7 @@ Windows 版与 Linux 版共享同一套核心引擎(纯 C 编写,见 `src/core`)
 
 ### 🪟 Windows 7 / 8 / 10 / 11(最简单)
 
-1. 下载 **`baozhangka-tool-windows-xp-x86.zip`**,解压得到 `BaoZhangKaTool.exe`(单个文件,约 770KB);
+1. 下载 **`click-assistant-windows-xp-x86.zip`**,解压得到 `ClickAssistant.exe`(单个文件,约 770KB);
 2. 双击运行即可 —— **无需安装、无需管理员权限、无运行库依赖**(32 位静态编译,64 位系统原生兼容)。
 
 建议:把 exe 放在一个固定文件夹(如 `D:\点击助手\`),因为同目录会保存:
@@ -111,9 +111,9 @@ Windows 版与 Linux 版共享同一套核心引擎(纯 C 编写,见 `src/core`)
 2. 解压并赋可执行权限,即可运行:
 
 ```sh
-tar xzf baozhangka-tool-linux-arm64.tar.gz   # 换成你的架构
-chmod +x baozhangka-tool
-./baozhangka-tool
+tar xzf click-assistant-linux-arm64.tar.gz   # 换成你的架构
+chmod +x click-assistant
+./click-assistant
 ```
 
 > Linux 版**零依赖**:界面为纯 X11 实现(libX11 + libXtst,任何 X11 桌面自带),
@@ -259,7 +259,7 @@ build\windows_build.bat
 ```sh
 sudo apt install gcc pkg-config libx11-dev libxtst-dev   # Debian/Ubuntu/树莓派
 sh build/linux_build.sh
-./dist/baozhangka-tool
+./dist/click-assistant
 ```
 
 **运行单元测试**(与 CI `verify-linux` job 一致,仅链 core 层,不链平台/GUI;

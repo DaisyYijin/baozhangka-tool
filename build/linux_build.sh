@@ -22,7 +22,7 @@ LIBS="$(pkg-config --libs x11 xtst) -lm -lpthread"
 
 mkdir -p dist
 echo "编译中..."
-gcc $CFLAGS -o dist/baozhangka-tool \
+gcc $CFLAGS -o dist/click-assistant \
     src/core/u8.c \
     src/core/inflate.c \
     src/core/zip.c \
@@ -39,7 +39,7 @@ gcc $CFLAGS -o dist/baozhangka-tool \
     $LIBS
 
 echo ""
-echo "构建成功: dist/baozhangka-tool"
-echo "运行: ./dist/baozhangka-tool"
+echo "构建成功: dist/click-assistant"
+echo "运行: ./dist/click-assistant"
 echo "(当前架构: $(uname -m))"
 echo "运行时依赖:仅 libX11 + libXtst(X11 桌面自带,无需安装任何东西)"

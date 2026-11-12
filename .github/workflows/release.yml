@@ -22,8 +22,8 @@ jobs:
         run: sh build/linux_build.sh
       - name: Verify no GTK/GLib dependencies
         run: |
-          ldd dist/baozhangka-tool
-          if ldd dist/baozhangka-tool | grep -iE 'gtk|glib|gdk|pango|cairo'; then
+          ldd dist/click-assistant
+          if ldd dist/click-assistant | grep -iE 'gtk|glib|gdk|pango|cairo'; then
             echo "::error::发现 GTK/GLib 残留依赖"
             exit 1
           fi
@@ -74,7 +74,7 @@ jobs:
         run: |
           Xvfb :99 -screen 0 1280x800x24 >/tmp/xvfb.log 2>&1 &
           sleep 2
-          DISPLAY=:99 ./dist/baozhangka-tool >/tmp/app.log 2>&1 &
+          DISPLAY=:99 ./dist/click-assistant >/tmp/app.log 2>&1 &
           APP=$!
           sleep 4
           if ! grep -q "entering main loop" /tmp/app.log; then
@@ -113,17 +113,17 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           cmd //c "build\\windows_build.bat"
-          file dist/BaoZhangKaTool.exe
+          file dist/ClickAssistant.exe
 
       - name: Package
         shell: pwsh
         run: |
-          Compress-Archive -Path dist\BaoZhangKaTool.exe -DestinationPath baozhangka-tool-windows-xp-x86.zip
+          Compress-Archive -Path dist\ClickAssistant.exe -DestinationPath click-assistant-windows-xp-x86.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: baozhangka-tool-windows-xp-x86
-          path: baozhangka-tool-windows-xp-x86.zip
+          name: click-assistant-windows-xp-x86
+          path: click-assistant-windows-xp-x86.zip
 
   # ---------- Linux x86_64(原生;debian:buster 老 glibc 基线,兼容老发行版) ----------
   linux-x86_64:
@@ -140,17 +140,17 @@ jobs:
             apt-get -o Acquire::Check-Valid-Until=false update -qq
             apt-get install -y -qq gcc pkg-config file binutils libx11-dev libxtst-dev
             sh build/linux_build.sh
-            file dist/baozhangka-tool
+            file dist/click-assistant
             echo '=== glibc symbol versions required (sorted, highest last) ==='
-            objdump -T dist/baozhangka-tool | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -3
-            cp dist/baozhangka-tool /repo/dist-out/
+            objdump -T dist/click-assistant | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -3
+            cp dist/click-assistant /repo/dist-out/
           "
       - name: Package
-        run: tar -czf baozhangka-tool-linux-x86_64.tar.gz -C dist-out baozhangka-tool
+        run: tar -czf click-assistant-linux-x86_64.tar.gz -C dist-out click-assistant
       - uses: actions/upload-artifact@v4
         with:
-          name: baozhangka-tool-linux-x86_64
-          path: baozhangka-tool-linux-x86_64.tar.gz
+          name: click-assistant-linux-x86_64
+          path: click-assistant-linux-x86_64.tar.gz
 
   # ---------- Linux ARM64(原生 runner;debian:buster 老 glibc 基线,兼容银河麒麟 V10) ----------
   linux-arm64:
@@ -167,17 +167,17 @@ jobs:
             apt-get -o Acquire::Check-Valid-Until=false update -qq
             apt-get install -y -qq gcc pkg-config file binutils libx11-dev libxtst-dev
             sh build/linux_build.sh
-            file dist/baozhangka-tool
+            file dist/click-assistant
             echo '=== glibc symbol versions required (sorted, highest last) ==='
-            objdump -T dist/baozhangka-tool | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -3
-            cp dist/baozhangka-tool /repo/dist-out/
+            objdump -T dist/click-assistant | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -3
+            cp dist/click-assistant /repo/dist-out/
           "
       - name: Package
-        run: tar -czf baozhangka-tool-linux-arm64.tar.gz -C dist-out baozhangka-tool
+        run: tar -czf click-assistant-linux-arm64.tar.gz -C dist-out click-assistant
       - uses: actions/upload-artifact@v4
         with:
-          name: baozhangka-tool-linux-arm64
-          path: baozhangka-tool-linux-arm64.tar.gz
+          name: click-assistant-linux-arm64
+          path: click-assistant-linux-arm64.tar.gz
 
   # ---------- Linux ARM32/armhf(树莓派 32 位系统,QEMU 原生编译) ----------
   linux-armhf:
@@ -198,17 +198,17 @@ jobs:
             apt-get update
             apt-get install -y gcc pkg-config file libxtst-dev
             sh build/linux_build.sh
-            file dist/baozhangka-tool
-            cp baozhangka-tool* /repo/ 2>/dev/null || cp dist/baozhangka-tool /repo/
-            cd /repo && tar -czf baozhangka-tool-linux-armhf.tar.gz baozhangka-tool
+            file dist/click-assistant
+            cp click-assistant* /repo/ 2>/dev/null || cp dist/click-assistant /repo/
+            cd /repo && tar -czf click-assistant-linux-armhf.tar.gz click-assistant
       - name: Package artifact
         run: |
           cd "$GITHUB_WORKSPACE"
-          [ -f baozhangka-tool-linux-armhf.tar.gz ] || tar -czf baozhangka-tool-linux-armhf.tar.gz baozhangka-tool
+          [ -f click-assistant-linux-armhf.tar.gz ] || tar -czf click-assistant-linux-armhf.tar.gz click-assistant
       - uses: actions/upload-artifact@v4
         with:
-          name: baozhangka-tool-linux-armhf
-          path: baozhangka-tool-linux-armhf.tar.gz
+          name: click-assistant-linux-armhf
+          path: click-assistant-linux-armhf.tar.gz
 
   # ---------- 汇总创建 Release ----------
   release:
